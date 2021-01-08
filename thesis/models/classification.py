@@ -1,11 +1,14 @@
 import torch
 from torch import nn
-from torchvision import models as tmodels
-from torchvision.models import VGG
+from torchvision.models import utils as tvutils
+from torchvision.models import vgg
 
-class MACVGG(VGG): # TODO: Grad off from unnecessary layers
-    def __init__(self, features, convs_per_block = [2, 2, 3, 3, 3], batch_norm = True):
-        super().__init__(features, init_weights=False)
+from .pix2pix.models import networks as p2pn
+
+class MACVGG(vgg.VGG): # TODO: Grad off from unnecessary layers
+    def __init__(self, model = 'vgg16_bn', convs_per_block = [2, 2, 3, 3, 3], batch_norm = True):
+        super().__init__(vgg.make_layers(vgg.cfgs[model]), init_weights=False)
+
         layers_per_conv = 3 if batch_norm else 2 # conv, batch norm (conditionally), relu
         layers_per_block = [convs * layers_per_conv + 1 for convs in convs_per_block] # +1 for max pool
         self.cutoff_1 = sum(layers_per_block[:-1]) - 1 # last relu of second-to-last block
@@ -16,3 +19,25 @@ class MACVGG(VGG): # TODO: Grad off from unnecessary layers
         x = self.features[self.cutoff_1 : self.cutoff_2](x)
         desc_2 = x.amax(dim=(-2, -1))
         return torch.cat(desc_1, desc_2, dim=1)
+
+class DIHE(nn.Module):
+    def __init__(self, embedder):
+        super().__init__()
+        self.generator = p2pn.define_G(3, 3, 64, 'unet_256')
+        self.discriminator = p2pn.define_D(3, 64, 'basic')
+        self.embedder = embedder
+        # TODO: Training
+
+def macvgg_embedder(model = 'vgg16_bn', pretrained = True, progress = True):
+    if model != 'vgg16_bn':
+        raise NotImplementedError(f'MACVGG convs_per_block not implemented for {model}')
+
+    model = MACVGG(model)
+    if pretrained:
+        state_dict = tvutils.load_state_dict_from_url(vgg.model_urls[model], progress=progress)
+        incompatible_keys = model.load_state_dict(state_dict)
+    
+    return model
+
+def standard_dihe():
+    return DIHE(macvgg_embedder())
