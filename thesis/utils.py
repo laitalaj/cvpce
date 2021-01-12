@@ -32,10 +32,12 @@ def build_fig(img, detections = [], groundtruth = [], detection_labels = [], gro
 def show(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = []):
     build_fig(img, detections, groundtruth, detection_labels, groundtruth_labels)
     plt.show()
+    plt.close()
 
 def save(img, out, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = []):
     build_fig(img, detections, groundtruth, detection_labels, groundtruth_labels)
     plt.savefig(out)
+    plt.close()
 
 def script_dir():
     return path.abspath(path.dirname(path.realpath(__file__)))

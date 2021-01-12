@@ -7,6 +7,7 @@ import pycocotools.cocoeval as cocoeval
 import torchvision.models as tmodels
 import torchvision.datasets as dsets
 import torchvision.transforms as tforms
+from torch.utils.data import DataLoader
 
 from . import datautils
 from . import utils
@@ -20,6 +21,7 @@ COCO_ANNOTATION_FILE = utils.rel_path(*DATA_DIR, 'coco', 'annotations', 'instanc
 
 SKU110K_IMG_DIR = utils.rel_path(*DATA_DIR, 'SKU110K_fixed', 'images')
 SKU110K_ANNOTATION_FILE = utils.rel_path(*DATA_DIR, 'SKU110K_fixed', 'annotations', 'annotations_val.csv')
+SKU110K_SKIP = ['test_274.jpg', 'train_882.jpg', 'train_924.jpg', 'train_4222.jpg', 'train_5822.jpg']
 
 OUT_DIR = utils.rel_path('out')
 
@@ -68,6 +70,25 @@ def visualize_sku110k(imgs, annotations, method):
     img, anns = random.choice(data)
     utils.show(img, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
     utils.show(anns['gaussians'])
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+def iter_sku110k(imgs, annotations):
+    data = datautils.SKU110KDataset(imgs, annotations, include_gaussians=False)
+    loader = DataLoader(data, batch_size=1, num_workers=8, collate_fn=datautils.sku110k_collate_fn)
+    for i, d in enumerate(loader):
+        if i % 100 == 0:
+            print(i)
+    
 
 @cli.command()
 @click.option(
@@ -223,7 +244,7 @@ def train_gln(imgs, annotations, out_dir, method):
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
     }
-    dataset = datautils.SKU110KDataset(imgs, annotations, **gauss_methods[method])
+    dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, **gauss_methods[method])
     proposals_training.train_proposal_generator(dataset, out_dir)
 
 if __name__ == '__main__':

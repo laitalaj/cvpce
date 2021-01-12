@@ -72,15 +72,15 @@ def sku110k_collate_fn(samples):
     return zip(*samples)
 
 class SKU110KDataset(tdata.Dataset):
-    def __init__(self, img_dir_path, annotation_file_path,
+    def __init__(self, img_dir_path, annotation_file_path, skip=[],
     include_gaussians=True, gauss_generate_method=generate_via_multivariate_normal, gauss_join_method=join_via_max):
         super().__init__()
         self.img_dir = img_dir_path
-        self.index = self.build_index(annotation_file_path)
+        self.index = self.build_index(annotation_file_path, skip)
         self.include_gaussians = include_gaussians
         self.generate_method = gauss_generate_method
         self.join_method = gauss_join_method
-    def build_index(self, annotation_file_path):
+    def build_index(self, annotation_file_path, skip):
         index = {}
         print('Building index...')
         with open(annotation_file_path, 'r') as annotation_file:
@@ -90,6 +90,8 @@ class SKU110KDataset(tdata.Dataset):
                     print(f'Malformed annotation row: {row}, skipping')
                     continue
                 name, x1, y1, x2, y2, _, img_width, img_height = row
+                if name in skip:
+                    continue
                 if name not in index:
                     index[name] = {'image_name': name, 'image_width': int(img_width), 'image_height': int(img_height), 'boxes': []}
                 index[name]['boxes'].append(torch.tensor([int(coord) for coord in (x1, y1, x2, y2)]))
@@ -111,4 +113,9 @@ class SKU110KDataset(tdata.Dataset):
                 index_entry['image_width'], index_entry['image_height'], index_entry['boxes'],
                 generate_method=self.generate_method(), join_method=self.join_method
             )
-        return to_tensor(img), index_entry
+        try:
+            return to_tensor(img), index_entry
+        except OSError:
+            print(f'WARNING: Malformed image: {index_entry["image_name"]}'
+                + f' - You\'ll probably want to explicitly skip this! Returning image 0 ({self.index[0]["image_name"]}) instead.')
+            return self[0]
