@@ -26,7 +26,19 @@ class DIHE(nn.Module):
         self.generator = p2pn.define_G(3, 3, 64, 'unet_256')
         self.discriminator = p2pn.define_D(3, 64, 'basic')
         self.embedder = embedder
-        # TODO: Training
+    def forward(self, positive, negative, reference): # TODO: Hierarchy stuff
+        # positive, negative: in vitro samples for generator and embedder
+        # reference: in situ sample for discriminator
+        anchor = self.generator(positive)
+        anchor_score = self.discriminator(anchor)
+        reference_score = self.discriminator(reference) #TODO: Diskriminaattorii halutaan ehkä päivittää kahessa stepissä? Mahdollisesti osana tätä forwardii?
+
+        anchor = self.embedder(anchor)
+        positive = self.embedder(positive)
+        negative = self.embedder(negative)
+
+        return anchor, positive, negative
+
 
 def macvgg_embedder(model = 'vgg16_bn', pretrained = True, progress = True):
     if model != 'vgg16_bn':
@@ -35,7 +47,7 @@ def macvgg_embedder(model = 'vgg16_bn', pretrained = True, progress = True):
     model = MACVGG(model)
     if pretrained:
         state_dict = tvutils.load_state_dict_from_url(vgg.model_urls[model], progress=progress)
-        incompatible_keys = model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict)
     
     return model
 
