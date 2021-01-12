@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as nnf
 from torchvision import models as tmodels
 from torchvision.models.detection import RetinaNet
-from torchvision.models.detection.backbone_utils import BackboneWithFPN, resnet_fpn_backbone
+from torchvision.models.detection.backbone_utils import BackboneWithFPN
 from torchvision.ops.feature_pyramid_network import ExtraFPNBlock, LastLevelP6P7
 from torchvision.ops.misc import FrozenBatchNorm2d
 
@@ -136,18 +136,18 @@ class BackboneWithFPNAndGaussians(BackboneWithFPN): # todo: gaussian layer on-of
         return p
 
 def gaussian_loss(predictions, targets, sizes, negative_threshold=0.0, positive_threshold=0.1, min_negatives=1000, negatives_per_positive=3):
-    transformed_targets = torch.zeros_like(predictions) # TODO: Tee tää jo datasettitasolla
+    batch_targets = torch.zeros_like(predictions) # can't be done on dataset level due to "unpredictability" -> probably could tune RetinaNet a bit
     for i, target_and_size in enumerate(zip(targets, sizes)):
         target, size = target_and_size
         target = target[None, None]
         size = tuple(s // 2 for s in size)
         target = nnf.interpolate(target, size=size, mode='bilinear')
-        transformed_targets[i, 0, :size[0], :size[1]] = target
+        batch_targets[i, 0, :size[0], :size[1]] = target
 
-    negative_mask = transformed_targets <= negative_threshold
-    positive_mask = transformed_targets >= positive_threshold
+    negative_mask = batch_targets <= negative_threshold
+    positive_mask = batch_targets >= positive_threshold
 
-    se = nnf.mse_loss(predictions, transformed_targets, reduction='none')
+    se = nnf.mse_loss(predictions, batch_targets, reduction='none')
     positive_se = se[positive_mask]
     negative_se = se[negative_mask]
 
@@ -174,7 +174,7 @@ class GaussianLayerNetwork(RetinaNet):
                 r['gaussians'] = g
         return res
 
-def gln_backbone(trainable_layers=3):
+def gln_backbone(trainable_layers=5):
     backbone = tmodels.resnet50(pretrained=True, norm_layer=FrozenBatchNorm2d)
 
     layers_to_train = ['layer4', 'layer3', 'layer2', 'layer1', 'conv1'][:trainable_layers]
@@ -184,7 +184,7 @@ def gln_backbone(trainable_layers=3):
 
     return backbone
 
-def state_logging_gln(num_classes = 1, trainable_layers=3):
+def state_logging_gln(num_classes = 1, trainable_layers=5):
     model = GaussianLayerNetwork(
         gln_backbone(trainable_layers),
         num_classes,
@@ -193,5 +193,5 @@ def state_logging_gln(num_classes = 1, trainable_layers=3):
     )
     return model
 
-def gln(num_classes = 1, trainable_layers=3):
+def gln(num_classes = 1, trainable_layers=4):
     return GaussianLayerNetwork(gln_backbone(trainable_layers), num_classes)

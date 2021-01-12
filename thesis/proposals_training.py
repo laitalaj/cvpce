@@ -9,7 +9,7 @@ from . import datautils
 from . import utils
 from .models import proposals
 
-def train_proposal_generator(img_dir_path, annotation_file_path, output_path, batch_size=1, num_workers=2):
+def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2):
     def print_time():
         print(f'-- {time.asctime(time.localtime())} --')
     def checkpoint():
@@ -36,7 +36,7 @@ def train_proposal_generator(img_dir_path, annotation_file_path, output_path, ba
     model = proposals.gln().cuda()
     optimizer = topt.SGD(model.parameters(), lr=0.001, momentum=0.9) # todo: finetune
 
-    sku110k_train = datautils.SKU110KDataset(img_dir_path, annotation_file_path)
+    sku110k_train = dataset
     test_image, _ = sku110k_train[0]
     loader = DataLoader(sku110k_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=datautils.sku110k_collate_fn)
 
@@ -51,7 +51,7 @@ def train_proposal_generator(img_dir_path, annotation_file_path, output_path, ba
         if i % 25 == 0:
             print(i, loss)
 
-        total_loss = loss['classification'] + loss['bbox_regression'] + 0.00001 * loss['gaussian'] # todo: scaling
+        total_loss = loss['classification'] + loss['bbox_regression'] + loss['gaussian'] # todo: scaling
         total_loss.backward()
         optimizer.step()
 

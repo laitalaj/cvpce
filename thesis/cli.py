@@ -13,7 +13,7 @@ from . import utils
 from . import proposals_training
 from .models import proposals
 
-DATA_DIR = ('..', 'data')
+DATA_DIR = ('..', '..', 'data')
 
 COCO_IMG_DIR = utils.rel_path(*DATA_DIR, 'coco', 'val2017')
 COCO_ANNOTATION_FILE = utils.rel_path(*DATA_DIR, 'coco', 'annotations', 'instances_val2017.json')
@@ -54,12 +54,20 @@ def visualize_coco(imgs, annotations):
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
     default=SKU110K_ANNOTATION_FILE
 )
-def visualize_sku110k(imgs, annotations):
-    data = datautils.SKU110KDataset(imgs, annotations)
+@click.option(
+    '--method',
+    type=click.Choice(['normal', 'kant']),
+    default='normal'
+)
+def visualize_sku110k(imgs, annotations, method):
+    gauss_methods = {
+        'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal(), 'gauss_join_method': datautils.join_via_max},
+        'kant': {'gauss_generate_method': datautils.generate_via_kant_method(), 'gauss_join_method': datautils.join_via_replacement},
+    }
+    data = datautils.SKU110KDataset(imgs, annotations, **gauss_methods[method])
     img, anns = random.choice(data)
     utils.show(img, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
-    gauss = datautils.generate_gaussians(anns['image_width'], anns['image_height'], anns['boxes'])
-    utils.show(gauss)
+    utils.show(anns['gaussians'])
 
 @cli.command()
 @click.option(
@@ -72,14 +80,23 @@ def visualize_sku110k(imgs, annotations):
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
     default=COCO_ANNOTATION_FILE
 )
-def visualize_gaussians(imgs, annotations):
+@click.option(
+    '--method',
+    type=click.Choice(['normal', 'kant']),
+    default='normal'
+)
+def visualize_gaussians(imgs, annotations, method):
+    gauss_methods = {
+        'normal': {'generate_method': datautils.generate_via_multivariate_normal(), 'join_method': datautils.join_via_max},
+        'kant': {'generate_method': datautils.generate_via_kant_method(), 'join_method': datautils.join_via_replacement},
+    }
     data = dsets.CocoDetection(root=imgs, annFile=annotations, transform=tforms.ToTensor())
     img, anns = random.choice(data)
     utils.show(img, groundtruth=[ann['bbox'] for ann in anns])
 
     _, h, w = img.shape
     coco_to_retina = lambda bbox: torch.tensor([bbox[0], bbox[1], bbox[0]+bbox[2], bbox[1]+bbox[3]])
-    gauss = datautils.generate_gaussians(w, h, [coco_to_retina(ann['bbox']) for ann in anns])
+    gauss = datautils.generate_gaussians(w, h, [coco_to_retina(ann['bbox']) for ann in anns], **gauss_methods[method])
     utils.show(gauss)
 
 @cli.command()
@@ -196,8 +213,18 @@ def gln_build_assistant(gln, input_sizes):
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
 )
-def train_gln(imgs, annotations, out_dir):
-    proposals_training.train_proposal_generator(imgs, annotations, out_dir)
+@click.option(
+    '--method',
+    type=click.Choice(['normal', 'kant']),
+    default='normal'
+)
+def train_gln(imgs, annotations, out_dir, method):
+    gauss_methods = {
+        'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
+        'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
+    }
+    dataset = datautils.SKU110KDataset(imgs, annotations, **gauss_methods[method])
+    proposals_training.train_proposal_generator(dataset, out_dir)
 
 if __name__ == '__main__':
     cli()
