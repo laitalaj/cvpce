@@ -135,24 +135,26 @@ class BackboneWithFPNAndGaussians(BackboneWithFPN): # todo: gaussian layer on-of
 
         return p
 
-def masked_se(diffs, masks): # TODO: harkitse nnf.mse_loss
-    return (diffs[masks] ** 2).sum()
-
-def gaussian_loss(predictions, targets, sizes, negative_threshold=-0.2, positive_threshold=0.1): # todo: tän koko riippuu kuvien koosta --> fixaile maby
-    # negative threshold penalizes for predicting background at object location
-    # positive threshold penalizes for predicting objects at background location
-    transformed_targets = torch.zeros_like(predictions)
+def gaussian_loss(predictions, targets, sizes, negative_threshold=0.0, positive_threshold=0.1, min_negatives=1000, negatives_per_positive=3):
+    transformed_targets = torch.zeros_like(predictions) # TODO: Tee tää jo datasettitasolla
     for i, target_and_size in enumerate(zip(targets, sizes)):
         target, size = target_and_size
-        target = target[None, None] # slice target by double-None to create batch and channel dimensions
-        size = tuple(s // 2 for s in size) # the gaussians returned by the subnet are half as big as the input images
+        target = target[None, None]
+        size = tuple(s // 2 for s in size)
         target = nnf.interpolate(target, size=size, mode='bilinear')
         transformed_targets[i, 0, :size[0], :size[1]] = target
 
-    diff = predictions - transformed_targets
-    negative_mask = diff < negative_threshold
-    positive_mask = diff > positive_threshold
-    return (masked_se(diff, negative_mask) + masked_se(diff, positive_mask)) / predictions.shape[0]
+    negative_mask = transformed_targets <= negative_threshold
+    positive_mask = transformed_targets >= positive_threshold
+
+    se = nnf.mse_loss(predictions, transformed_targets, reduction='none')
+    positive_se = se[positive_mask]
+    negative_se = se[negative_mask]
+
+    top_negatives = max(min_negatives, negatives_per_positive * len(positive_se))
+    top_indices = negative_se.argsort(descending = True)[:top_negatives]
+
+    return (positive_se.sum() + negative_se[top_indices].sum()) / (len(positive_se) + len(top_indices))
 
 class GaussianLayerNetwork(RetinaNet):
     def __init__(self, resnet, num_classes, extra_fpn_block=LastLevelP6P7, transform_wrapper=SizeCapturingTransform, **kwargs):

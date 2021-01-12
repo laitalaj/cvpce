@@ -7,16 +7,16 @@ from torch.utils import data as tdata
 from torch import distributions as tdist
 from torchvision.transforms.functional import to_tensor
 
-def _join_via_addition(img, xx, yy, probs):
+def join_via_addition(img, xx, yy, probs):
     img[yy, xx] += probs
 
-def _join_via_replacement(img, xx, yy, probs):
+def join_via_replacement(img, xx, yy, probs):
     img[yy, xx] = probs
 
-def _join_via_max(img, xx, yy, probs):
+def join_via_max(img, xx, yy, probs):
     img[yy, xx] = torch.max(img[yy, xx], probs)
 
-def generate_gaussians(w, h, boxes, peak=1, join_method=_join_via_max):
+def generate_gaussians(w, h, boxes, peak=1, join_method=join_via_max):
     img = torch.zeros((h, w))
 
     for b in boxes:
