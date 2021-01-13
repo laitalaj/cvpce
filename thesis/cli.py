@@ -239,13 +239,29 @@ def gln_build_assistant(gln, input_sizes):
     type=click.Choice(['normal', 'kant']),
     default='normal'
 )
-def train_gln(imgs, annotations, out_dir, method):
+@click.option(
+    '--batch-size',
+    type=int,
+    default=1
+)
+@click.option(
+    '--dataloader-workers',
+    type=int,
+    default=16
+)
+@click.option(
+    '--epochs',
+    type=int,
+    default=10
+)
+@click.option('--parallel/--no-parallel', default=False)
+def train_gln(imgs, annotations, out_dir, method, batch_size, dataloader_workers, epochs, parallel):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
     }
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, **gauss_methods[method])
-    proposals_training.train_proposal_generator(dataset, out_dir)
+    proposals_training.train_proposal_generator(dataset, out_dir, batch_size, dataloader_workers, epochs, parallel)
 
 if __name__ == '__main__':
     cli()
