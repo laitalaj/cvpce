@@ -25,13 +25,15 @@ def save_pictures(out_path, name, model, img):
         utils.save(results['gaussians'].cpu(), path.join(out_path, f'{name}_gaussians.png'))
     model.train()
 
-def save_model(out, model, optimizer, **extra):
+def save_model(out, model, optimizer, scheduler, **extra):
     torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
         **extra
     }, out)
 
+# TODO: https://yangkky.github.io/2019/07/08/distributed-pytorch-tutorial.html
 def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, epochs=1, parallel=False):
     def checkpoint():
         print(f'Saving results for test image at iteration {i}...')
@@ -45,7 +47,7 @@ def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, 
         current_path = path.join(output_path, f'{current_name}.tar')
         if path.exists(current_path):
             os.replace(current_path, previous_path)
-        save_model(current_path, model, optimizer, epoch=e, iteration=i)
+        save_model(current_path, model, optimizer, scheduler, epoch=e, iteration=i)
 
         print('Checkpoint!')
         print_time()
@@ -60,7 +62,7 @@ def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, 
         }, path.join(output_path, f'stats_{e}.pickle'))
         print(f'Saving model after epoch {e}...')
         out = path.join(output_path, f'epoch_{e}.tar')
-        save_model(out, model, optimizer, epoch=e)
+        save_model(out, model, optimizer, scheduler, epoch=e)
 
         print(f'Epoch {e} finished!')
         print_time()
@@ -70,10 +72,14 @@ def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, 
         model = nn.DataParallel(model)
     model.cuda()
     
-    optimizer = topt.SGD(model.parameters(), lr=0.001, momentum=0.9) # todo: finetune
+    optimizer = topt.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters
+    scheduler = topt.lr_scheduler.MultiStepLR(optimizer, milestones=[60_000//len(dataset), 80_000//len(dataset)], gamma=0.1) # RetinaNet learning rate adjustments
 
     test_image, _ = dataset[0]
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=datautils.sku110k_collate_fn)
+    loader = DataLoader(dataset,
+        batch_size=batch_size, shuffle=True, num_workers=num_workers,
+        collate_fn=datautils.sku110k_collate_fn, pin_memory=True
+    )
 
     class_losses = []
     reg_losses = []
@@ -83,9 +89,8 @@ def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, 
     i = 0
     print(f'Training for {epochs} epochs, starting now!')
     while e < epochs:
-        for images, targets in loader:
-            images = [i.cuda() for i in images]
-            targets = [{'boxes': t['boxes'].cuda(), 'labels': t['labels'].cuda(), 'gaussians': t['gaussians'].cuda()} for t in targets]
+        for batch in loader:
+            images, targets = batch.cuda(non_blocking = True)
 
             batch_start = time.time()
 
@@ -105,16 +110,17 @@ def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, 
             gauss_losses.append(loss['gaussian'].item())
             batch_times.append(elapsed)
 
-            if i % 100 == 0:
+            if i % 50 == 0:
                 print(f'batch:{i:05d}\t{elapsed:.4f}s\tclass:{class_losses[-1]:.4f}\treg:{reg_losses[-1]:.4f}\tgauss:{gauss_losses[-1]:.4f}')
 
-            del total_loss, loss, images, targets # manual cleanup to get the most out of GPU memory
+            del total_loss, loss, batch, images, targets # manual cleanup to get the most out of GPU memory
 
             if i % 200 == 0:
                 checkpoint()
 
             i += 1
 
+        scheduler.step()
         epoch_checkpoint()
         e += 1
 

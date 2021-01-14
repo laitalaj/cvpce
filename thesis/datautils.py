@@ -69,7 +69,30 @@ def generate_gaussians(w, h, boxes, size_reduction=1, generate_method=generate_v
     return img
 
 def sku110k_collate_fn(samples):
-    return zip(*samples)
+    return SKU110KBatch(samples)
+
+class SKU110KBatch:
+    def __init__(self, samples, gaussians=True):
+        self.images, self.targets = zip(*samples)
+        self.tensor_target_keys = ['boxes', 'labels', 'gaussians'] if gaussians else ['boxes', 'labels']
+    def __getitem__(self, i):
+        if i == 0: return self.images
+        if i == 1: return self.targets
+        raise IndexError
+    def pin_memory(self):
+        for i in self.images:
+            i.pin_memory()
+
+        for t in self.targets:
+            for g in self.tensor_target_keys:
+                if g not in t: continue
+                t[g].pin_memory()
+
+        return self
+    def cuda(self, non_blocking=True):
+        self.images = [i.cuda(non_blocking=non_blocking) for i in self.images]
+        self.targets = [{k: t[k].cuda(non_blocking=non_blocking) for k in self.tensor_target_keys} for t in self.targets]
+        return self
 
 class SKU110KDataset(tdata.Dataset):
     def __init__(self, img_dir_path, annotation_file_path, skip=[],

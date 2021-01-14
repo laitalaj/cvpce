@@ -247,7 +247,7 @@ def gln_build_assistant(gln, input_sizes):
 @click.option(
     '--dataloader-workers',
     type=int,
-    default=16
+    default=4
 )
 @click.option(
     '--epochs',
