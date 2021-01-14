@@ -141,7 +141,7 @@ def gaussian_loss(predictions, targets, sizes, negative_threshold=0.0, positive_
         target, size = target_and_size
         target = target[None, None]
         size = tuple(s // 2 for s in size)
-        target = nnf.interpolate(target, size=size, mode='bilinear')
+        target = nnf.interpolate(target, size=size, mode='bilinear', align_corners=False)
         batch_targets[i, 0, :size[0], :size[1]] = target
 
     negative_mask = batch_targets <= negative_threshold

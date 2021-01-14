@@ -43,7 +43,7 @@ def generate_via_kant_method(size=120, sigma=40):
 
     base = base[None, None] # introduce minibatch- and channel dims for nnf.interpolate
     def do_generate(cx, cy, width, height, xx, yy):
-        return nnf.interpolate(base, size=(xx.shape[0], yy.shape[1]), mode='bilinear')
+        return nnf.interpolate(base, size=(xx.shape[0], yy.shape[1]), mode='bilinear', align_corners=False)
     return do_generate
 
 def generate_gaussians(w, h, boxes, size_reduction=1, generate_method=generate_via_multivariate_normal(), join_method=join_via_max):
