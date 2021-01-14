@@ -40,7 +40,10 @@ def save(img, out, detections = [], groundtruth = [], detection_labels = [], gro
     plt.close()
 
 def script_dir():
-    return path.abspath(path.dirname(path.realpath(__file__)))
+    return path.abspath(path.join(path.dirname(path.realpath(__file__)), '..'))
 
 def rel_path(*parts):
     return path.join(script_dir(), *parts)
+
+def dist_init_file():
+    return rel_path('dist_init')

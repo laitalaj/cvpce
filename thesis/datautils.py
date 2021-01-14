@@ -89,9 +89,9 @@ class SKU110KBatch:
                 t[g].pin_memory()
 
         return self
-    def cuda(self, non_blocking=True):
-        self.images = [i.cuda(non_blocking=non_blocking) for i in self.images]
-        self.targets = [{k: t[k].cuda(non_blocking=non_blocking) for k in self.tensor_target_keys} for t in self.targets]
+    def cuda(self, device=None, non_blocking=True):
+        self.images = [i.cuda(device, non_blocking=non_blocking) for i in self.images]
+        self.targets = [{k: t[k].cuda(device, non_blocking=non_blocking) for k in self.tensor_target_keys} for t in self.targets]
         return self
 
 class SKU110KDataset(tdata.Dataset):

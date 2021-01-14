@@ -1,7 +1,9 @@
+import os
 import random
 
 import click
 import torch
+import torch.multiprocessing as mp
 import torch.utils.tensorboard as tboard
 import pycocotools.cocoeval as cocoeval
 import torchvision.models as tmodels
@@ -14,7 +16,7 @@ from . import utils
 from . import proposals_training
 from .models import proposals
 
-DATA_DIR = ('..', '..', 'data')
+DATA_DIR = ('..', 'data')
 
 COCO_IMG_DIR = utils.rel_path(*DATA_DIR, 'coco', 'val2017')
 COCO_ANNOTATION_FILE = utils.rel_path(*DATA_DIR, 'coco', 'annotations', 'instances_val2017.json')
@@ -234,34 +236,24 @@ def gln_build_assistant(gln, input_sizes):
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
 )
-@click.option(
-    '--method',
-    type=click.Choice(['normal', 'kant']),
-    default='normal'
-)
-@click.option(
-    '--batch-size',
-    type=int,
-    default=1
-)
-@click.option(
-    '--dataloader-workers',
-    type=int,
-    default=4
-)
-@click.option(
-    '--epochs',
-    type=int,
-    default=10
-)
-@click.option('--parallel/--no-parallel', default=False)
-def train_gln(imgs, annotations, out_dir, method, batch_size, dataloader_workers, epochs, parallel):
+@click.option('--method', type=click.Choice(['normal', 'kant']), default='normal')
+@click.option('--batch-size', type=int, default=1)
+@click.option('--dataloader-workers', type=int, default=4)
+@click.option('--epochs', type=int, default=11)
+@click.option('--gpus', type=int, default=1)
+def train_gln(imgs, annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
     }
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, **gauss_methods[method])
-    proposals_training.train_proposal_generator(dataset, out_dir, batch_size, dataloader_workers, epochs, parallel)
+    args = (dataset, out_dir, batch_size, dataloader_workers, epochs, gpus)
+    if gpus > 1:
+        if os.path.exists(utils.dist_init_file()): # Make sure that the initialization file is clean to avoid unforeseen consequences
+            os.remove(utils.dist_init_file())
+        mp.spawn(proposals_training.train_proposal_generator, args=args, nprocs=gpus)
+    else:
+        proposals_training.train_proposal_generator(0, *args)
 
 if __name__ == '__main__':
     cli()

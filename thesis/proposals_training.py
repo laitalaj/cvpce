@@ -3,9 +3,10 @@ import os
 from os import path
 
 import torch
+from torch import distributed as dist
 from torch import nn
 from torch import optim as topt
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, distributed as distutils
 
 from . import datautils
 from . import utils
@@ -34,7 +35,7 @@ def save_model(out, model, optimizer, scheduler, **extra):
     }, out)
 
 # TODO: https://yangkky.github.io/2019/07/08/distributed-pytorch-tutorial.html
-def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, epochs=1, parallel=False):
+def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_workers=2, epochs=1, gpus=1):
     def checkpoint():
         print(f'Saving results for test image at iteration {i}...')
         img_name = f'{i:05d}'
@@ -67,60 +68,69 @@ def train_proposal_generator(dataset, output_path, batch_size=1, num_workers=2, 
         print(f'Epoch {e} finished!')
         print_time()
 
-    model = proposals.gln()
-    if parallel:
-        model = nn.DataParallel(model)
-    model.cuda()
+    torch.cuda.set_device(gpu)
+    model = proposals.gln().cuda()
+
+    if gpus > 1:
+        dist.init_process_group(
+            backend='nccl', init_method=f'file://{utils.dist_init_file()}',
+            world_size=gpus, rank=gpu
+        )
+        model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     
     optimizer = topt.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters
     scheduler = topt.lr_scheduler.MultiStepLR(optimizer, milestones=[60_000//len(dataset), 80_000//len(dataset)], gamma=0.1) # RetinaNet learning rate adjustments
 
     test_image, _ = dataset[0]
+    sampler = distutils.DistributedSampler(dataset, num_replicas=gpus, rank=gpu) if gpus > 1 else None
     loader = DataLoader(dataset,
-        batch_size=batch_size, shuffle=True, num_workers=num_workers,
-        collate_fn=datautils.sku110k_collate_fn, pin_memory=True
+        batch_size=batch_size, num_workers=num_workers,
+        collate_fn=datautils.sku110k_collate_fn, pin_memory=True,
+        shuffle=(gpus == 1), sampler=sampler
     )
 
-    class_losses = []
-    reg_losses = []
-    gauss_losses = []
-    batch_times = []
     e = 0
     i = 0
-    print(f'Training for {epochs} epochs, starting now!')
+    first = gpu == 0
+    if first:
+        class_losses = []
+        reg_losses = []
+        gauss_losses = []
+        batch_times = []
+        print(f'Training for {epochs} epochs, starting now!')
     while e < epochs:
         for batch in loader:
             images, targets = batch.cuda(non_blocking = True)
 
-            batch_start = time.time()
+            if first: batch_start = time.time()
 
             optimizer.zero_grad()
 
             loss = model(images, targets)
 
-            total_loss = loss['classification'] + loss['bbox_regression'] + loss['gaussian'] # todo: scaling
+            total_loss = loss['classification'] + loss['bbox_regression'] + loss['gaussian'] # todo: scaling (though Kant has 1 for all of these)
             total_loss.backward()
             optimizer.step()
 
-            batch_end = time.time()
-            elapsed = batch_end - batch_start
+            if first:
+                batch_end = time.time()
+                elapsed = batch_end - batch_start
+                class_losses.append(loss['classification'].item())
+                reg_losses.append(loss['bbox_regression'].item())
+                gauss_losses.append(loss['gaussian'].item())
+                batch_times.append(elapsed)
 
-            class_losses.append(loss['classification'].item())
-            reg_losses.append(loss['bbox_regression'].item())
-            gauss_losses.append(loss['gaussian'].item())
-            batch_times.append(elapsed)
-
-            if i % 50 == 0:
+            if first and i % 50 == 0:
                 print(f'batch:{i:05d}\t{elapsed:.4f}s\tclass:{class_losses[-1]:.4f}\treg:{reg_losses[-1]:.4f}\tgauss:{gauss_losses[-1]:.4f}')
 
             del total_loss, loss, batch, images, targets # manual cleanup to get the most out of GPU memory
 
-            if i % 200 == 0:
+            if first and i % 200 == 0:
                 checkpoint()
 
             i += 1
 
         scheduler.step()
-        epoch_checkpoint()
+        if first: epoch_checkpoint()
         e += 1
 
