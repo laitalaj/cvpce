@@ -79,7 +79,7 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
         model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     
     optimizer = topt.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters
-    scheduler = topt.lr_scheduler.MultiStepLR(optimizer, milestones=[60_000//len(dataset), 80_000//len(dataset)], gamma=0.1) # RetinaNet learning rate adjustments
+    scheduler = topt.lr_scheduler.MultiStepLR(optimizer, milestones=[12, 18], gamma=0.1) # Something akin to RetinaNet learning rate adjustments
 
     test_image, _ = dataset[0]
     sampler = distutils.DistributedSampler(dataset, num_replicas=gpus, rank=gpu) if gpus > 1 else None
