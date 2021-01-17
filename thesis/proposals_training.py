@@ -78,7 +78,7 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
         )
         model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     
-    optimizer = topt.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters
+    optimizer = topt.SGD(model.parameters(), lr=0.002, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters w/ 1/5 lr
     scheduler = topt.lr_scheduler.MultiStepLR(optimizer, milestones=[12, 18], gamma=0.1) # Something akin to RetinaNet learning rate adjustments
 
     test_image, _ = dataset[0]
@@ -109,6 +109,8 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
             loss = model(images, targets)
 
             total_loss = loss['classification'] + loss['bbox_regression'] + loss['gaussian'] # todo: scaling (though Kant has 1 for all of these)
+            if first and total_loss > 100:
+               print(f'!!! Exploded loss at iteration {i}: {loss}')
             total_loss.backward()
             optimizer.step()
 
