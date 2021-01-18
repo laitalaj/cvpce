@@ -71,6 +71,9 @@ def generate_gaussians(w, h, boxes, size_reduction=1, generate_method=generate_v
 def sku110k_collate_fn(samples):
     return SKU110KBatch(samples)
 
+def sku110k_no_gauss_collate_fn(samples):
+    return SKU110KBatch(samples, gaussians=False)
+
 class SKU110KBatch:
     def __init__(self, samples, gaussians=True):
         self.images, self.targets = zip(*samples)

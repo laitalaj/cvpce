@@ -174,8 +174,8 @@ class GaussianLayerNetwork(RetinaNet):
                 r['gaussians'] = g
         return res
 
-def gln_backbone(trainable_layers=5):
-    backbone = tmodels.resnet50(pretrained=True, norm_layer=FrozenBatchNorm2d)
+def gln_backbone(trainable_layers=5, pretrained=True):
+    backbone = tmodels.resnet50(pretrained=pretrained, norm_layer=FrozenBatchNorm2d)
 
     layers_to_train = ['layer4', 'layer3', 'layer2', 'layer1', 'conv1'][:trainable_layers]
     for name, parameter in backbone.named_parameters():
@@ -193,5 +193,5 @@ def state_logging_gln(num_classes = 1, trainable_layers=5):
     )
     return model
 
-def gln(num_classes = 1, trainable_layers=4):
-    return GaussianLayerNetwork(gln_backbone(trainable_layers), num_classes)
+def gln(num_classes = 1, trainable_layers=4, pretrained_backbone=True):
+    return GaussianLayerNetwork(gln_backbone(trainable_layers, pretrained_backbone), num_classes)

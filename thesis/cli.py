@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 
 from . import datautils
 from . import utils
-from . import proposals_training
+from . import proposals_training, proposals_eval
 from .models import proposals
 
 DATA_DIR = ('..', 'data')
@@ -254,6 +254,29 @@ def train_gln(imgs, annotations, out_dir, method, batch_size, dataloader_workers
         mp.spawn(proposals_training.train_proposal_generator, args=args, nprocs=gpus)
     else:
         proposals_training.train_proposal_generator(0, *args)
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option('--batch-size', type=int, default=1)
+@click.option('--dataloader-workers', type=int, default=4)
+@click.option('--iou-threshold', '-t', type=float, multiple=True, default=(0.5,))
+@click.argument('state-file',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+def eval_gln(imgs, annotations, batch_size, dataloader_workers, iou_threshold, state_file):
+    dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False)
+    evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=iou_threshold, batch_size=batch_size, num_workers=dataloader_workers)
+    for t in iou_threshold:
+        print(f'{t}:\t{evaluation[t]}')
 
 if __name__ == '__main__':
     cli()

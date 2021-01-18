@@ -34,7 +34,8 @@ def save_model(out, model, optimizer, scheduler, **extra):
         **extra
     }, out)
 
-# TODO: https://yangkky.github.io/2019/07/08/distributed-pytorch-tutorial.html
+# TODO: check if checkpoint works correctly: should the underlying modules state dict be saved instead of the wrappers? why are the gaussians blank?
+# see: https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
 def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_workers=2, epochs=1, gpus=1):
     def checkpoint():
         print(f'Saving results for test image at iteration {i}...')
