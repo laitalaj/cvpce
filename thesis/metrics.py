@@ -1,4 +1,5 @@
 import heapq
+import multiprocessing as mp
 
 import torch
 from torchvision import ops as tvops
@@ -79,25 +80,22 @@ def average_precision(precision, recall):
         else: break # if there were no precisions for recall r1, there won't be any for recall r2 > r1
     return values.mean()
 
-def calculate_metrics(targets, predictions, confidences, iou_thresholds = (0.5,)):
-    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
-    sorted_confidences = []
-    total_predictions = 0
-    total_targets = 0
-    for target, prediction, confidence in zip(targets, predictions, confidences):
-        confidence, sort_idx = torch.sort(confidence)
-        prediction = prediction[sort_idx]
+def _process_one(target, prediction, confidence, iou_thresholds):
+    confidence, sort_idx = torch.sort(confidence)
+    prediction = prediction[sort_idx]
 
-        sorted_confidences.append(confidence)
-        total_predictions += prediction.shape[0]
-        total_targets += target.shape[0]
+    iou_matrix, index_matrix = iou_matrices(target, prediction)
+    matches_for_threshold = {}
+    for t in iou_thresholds:
+        tp, fp = check_matches(iou_matrix, index_matrix, t)
+        matches_for_threshold[t] = {
+            'true_positives': tp,
+            'false_positives': fp,
+        }
 
-        iou_matrix, index_matrix = iou_matrices(target, prediction)
-        for t in iou_thresholds:
-            tp, fp = check_matches(iou_matrix, index_matrix, t)
-            matches_for_threshold[t]['true_positives'].append(tp)
-            matches_for_threshold[t]['false_positives'].append(fp)
+    return matches_for_threshold, confidence, prediction.shape[0], target.shape[0]
 
+def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets):
     res = {}
     for t in iou_thresholds:
         tp, fp = merge_matches(
@@ -121,6 +119,60 @@ def calculate_metrics(targets, predictions, confidences, iou_thresholds = (0.5,)
             'ap': average_precision(p, r),
         }
     return res
+
+def calculate_metrics(targets, predictions, confidences, iou_thresholds = (0.5,)):
+    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
+    sorted_confidences = []
+    total_predictions = 0
+    total_targets = 0
+    for target, prediction, confidence in zip(targets, predictions, confidences):
+        matches, conf, predictions, targets = _process_one(target, prediction, confidence, iou_thresholds)
+        sorted_confidences.append(conf)
+        total_predictions += predictions
+        total_targets += targets
+        for t in iou_thresholds:
+            matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
+            matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
+
+    return _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets)
+
+def _image_processer(input_queue, output_queue, iou_thresholds):
+    for target, prediction, confidence in iter(input_queue.get, None):
+        result = _process_one(target, prediction, confidence, iou_thresholds)
+        output_queue.put(result)
+        input_queue.task_done()
+    input_queue.task_done()
+
+def _metric_calculator(output_queue, pipe, iou_thresholds):
+    proceed = pipe.recv()
+    if not proceed:
+        return
+    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
+    sorted_confidences = []
+    total_predictions = 0
+    total_targets = 0
+    while not output_queue.empty():
+        matches, conf, predictions, targets = output_queue.get_nowait()
+        sorted_confidences.append(conf)
+        total_predictions += predictions
+        total_targets += targets
+        for t in iou_thresholds:
+            matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
+            matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
+    res = _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets)
+    pipe.send(res)
+
+def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
+    input_queue = mp.JoinableQueue()
+    output_queue = mp.Queue()
+    out_pipe, in_pipe = mp.Pipe()
+
+    for _ in range(processes):
+        mp.Process(target=_image_processer, args=(input_queue, output_queue, iou_thresholds)).start()
+
+    mp.Process(target=_metric_calculator, args=(output_queue, in_pipe, iou_thresholds)).start()
+
+    return input_queue, out_pipe
 
 def plot_prf(precision, recall, fscore):
     plt.plot(recall, precision, label='Precision')
