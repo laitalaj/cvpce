@@ -54,7 +54,7 @@ def evaluate_gln_async(model, dataset, thresholds=(.5,), batch_size=1, num_worke
         collate_fn=datautils.sku110k_no_gauss_collate_fn, pin_memory=True,
     )
 
-    queue, pipe = metrics.calculate_metrics_async(processes=num_metric_processes, iou_thresholds=thresholds)
+    queue, pipe, procs = metrics.calculate_metrics_async(processes=num_metric_processes, iou_thresholds=thresholds)
     print('Eval start!')
     with torch.no_grad():
         for i, batch in enumerate(loader):
@@ -72,6 +72,8 @@ def evaluate_gln_async(model, dataset, thresholds=(.5,), batch_size=1, num_worke
     print('Starting metric calculation...')
     pipe.send(True)
     res = pipe.recv()
+    for p in procs:
+        p.join()
     print('Metrics calculated!')
     if plots:
         for t in thresholds:
