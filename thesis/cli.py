@@ -232,6 +232,11 @@ def gln_build_assistant(gln, input_sizes):
     default=SKU110K_ANNOTATION_FILE
 )
 @click.option(
+    '--eval-annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
@@ -241,13 +246,14 @@ def gln_build_assistant(gln, input_sizes):
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=11)
 @click.option('--gpus', type=int, default=1)
-def train_gln(imgs, annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus):
+def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
     }
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, **gauss_methods[method])
-    args = (dataset, out_dir, batch_size, dataloader_workers, epochs, gpus)
+    evalset = datautils.SKU110KDataset(imgs, eval_annotations, skip=SKU110K_SKIP, include_gaussians=False)
+    args = (dataset, evalset, out_dir, batch_size, dataloader_workers, epochs, gpus)
     if gpus > 1:
         if os.path.exists(utils.dist_init_file()): # Make sure that the initialization file is clean to avoid unforeseen consequences
             os.remove(utils.dist_init_file())
@@ -276,7 +282,7 @@ def train_gln(imgs, annotations, out_dir, method, batch_size, dataloader_workers
 )
 def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, trim_module_prefix, state_file):
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False)
-    evaluation = proposals_eval.evaluate_gln_async(state_file, dataset, thresholds=iou_threshold,
+    evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=iou_threshold,
         batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix)
     for t in iou_threshold:
         print(f'{t}:\t{evaluation[t]}')

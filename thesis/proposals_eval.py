@@ -17,9 +17,7 @@ def _load_gln(save_file, trim_module_prefix):
     model.eval()
     return model
 
-def evaluate_gln(save_file, dataset, thresholds=(.5,), batch_size=1, num_workers=2, plots=True, trim_module_prefix=True):
-    model = _load_gln(save_file, trim_module_prefix)
-
+def evaluate_gln_sync(model, dataset, thresholds=(.5,), batch_size=1, num_workers=2, plots=True):
     loader = tdata.DataLoader(dataset,
         batch_size=batch_size, num_workers=num_workers,
         collate_fn=datautils.sku110k_no_gauss_collate_fn, pin_memory=True,
@@ -28,16 +26,17 @@ def evaluate_gln(save_file, dataset, thresholds=(.5,), batch_size=1, num_workers
     targets = []
     confidences = []
     print('Eval start!')
-    for i, batch in enumerate(loader):
-        if i % 100 == 0:
-            print(f'{i}...')
-        images, batch_targets = batch.cuda(non_blocking = True)
-        result = model(images)
+    with torch.no_grad():
+        for i, batch in enumerate(loader):
+            if i % 100 == 0:
+                print(f'{i}...')
+            images, batch_targets = batch.cuda(non_blocking = True)
+            result = model(images)
 
-        for r, t in zip(result, batch_targets):
-            predictions.append(r['boxes'].detach().cpu())
-            targets.append(t['boxes'].detach().cpu())
-            confidences.append(r['scores'].detach().cpu())
+            for r, t in zip(result, batch_targets):
+                predictions.append(r['boxes'].detach().cpu())
+                targets.append(t['boxes'].detach().cpu())
+                confidences.append(r['scores'].detach().cpu())
 
     print('All data passed through model! Calculating metrics...')
     res = metrics.calculate_metrics(targets, predictions, confidences, thresholds)
@@ -49,8 +48,7 @@ def evaluate_gln(save_file, dataset, thresholds=(.5,), batch_size=1, num_workers
     print('Eval done!')
     return {thresh: {k: v for k, v in itm.items() if k != 'raw'} for thresh, itm in res.items()}
 
-def evaluate_gln_async(save_file, dataset, thresholds=(.5,), batch_size=1, num_workers=2, num_metric_processes=4, plots=True, trim_module_prefix=True):
-    model = _load_gln(save_file, trim_module_prefix)
+def evaluate_gln_async(model, dataset, thresholds=(.5,), batch_size=1, num_workers=2, num_metric_processes=4, plots=True):
     loader = tdata.DataLoader(dataset,
         batch_size=batch_size, num_workers=num_workers,
         collate_fn=datautils.sku110k_no_gauss_collate_fn, pin_memory=True,
@@ -58,13 +56,14 @@ def evaluate_gln_async(save_file, dataset, thresholds=(.5,), batch_size=1, num_w
 
     queue, pipe = metrics.calculate_metrics_async(processes=num_metric_processes, iou_thresholds=thresholds)
     print('Eval start!')
-    for i, batch in enumerate(loader):
-        if i % 100 == 0:
-            print(f'{i}...')
-        images, batch_targets = batch.cuda(non_blocking = True)
-        result = model(images)
-        for r, t in zip(result, batch_targets):
-            queue.put((t['boxes'].detach().cpu(), r['boxes'].detach().cpu(), r['scores'].detach().cpu()))
+    with torch.no_grad():
+        for i, batch in enumerate(loader):
+            if i % 100 == 0:
+                print(f'{i}...')
+            images, batch_targets = batch.cuda(non_blocking = True)
+            result = model(images)
+            for r, t in zip(result, batch_targets):
+                queue.put((t['boxes'].detach().cpu(), r['boxes'].detach().cpu(), r['scores'].detach().cpu()))
 
     print('All data passed through model! Waiting for metric workers...')
     for _ in range(num_metric_processes):
@@ -80,3 +79,7 @@ def evaluate_gln_async(save_file, dataset, thresholds=(.5,), batch_size=1, num_w
             metrics.plot_prf(res[t]['raw']['p'], res[t]['raw']['r'], res[t]['raw']['f'])
     print('Eval done!')
     return {thresh: {k: v for k, v in itm.items() if k != 'raw'} for thresh, itm in res.items()}
+
+def evaluate_gln(save_file, dataset, thresholds=(.5,), batch_size=1, num_workers=2, num_metric_processes=4, plots=True, trim_module_prefix=True):
+    model = _load_gln(save_file, trim_module_prefix)
+    return evaluate_gln_async(model, dataset, thresholds, batch_size, num_workers, num_metric_processes, plots)

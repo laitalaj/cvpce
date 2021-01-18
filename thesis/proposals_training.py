@@ -8,14 +8,14 @@ from torch import nn
 from torch import optim as topt
 from torch.utils.data import DataLoader, distributed as distutils
 
-from . import datautils
-from . import utils
+from . import datautils, proposals_eval, utils
 from .models import proposals
 
 def print_time():
     print(f'-- {time.asctime(time.localtime())} --')
 
-def save_pictures(out_path, name, model, img):
+def save_pictures(out_path, name, model, img, distributed=False):
+    if distributed: model = model.module # unwrap the actual model underlying DDP as suggested in https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
     model.eval()
     with torch.no_grad():
         results = model(img[None].cuda())[0]
@@ -34,13 +34,20 @@ def save_model(out, model, optimizer, scheduler, **extra):
         **extra
     }, out)
 
+def evaluate(model, dataset, batch_size, num_workers, threshold=.75, distributed=False):
+    if distributed: model = model.module # unwrap the actual model underlying DDP as suggested in https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
+    model.eval()
+    res = proposals_eval.evaluate_gln_async(model, dataset, thresholds=(threshold,), batch_size=batch_size, num_workers=num_workers, num_metric_processes=num_workers, plots=False)
+    model.train()
+    return res[threshold]
+
 # TODO: check if checkpoint works correctly: should the underlying modules state dict be saved instead of the wrappers? why are the gaussians blank?
 # see: https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
-def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_workers=2, epochs=1, gpus=1):
+def train_proposal_generator(gpu, dataset, evalset, output_path, batch_size=1, num_workers=2, epochs=1, gpus=1, checkpoint_interval = 200):
     def checkpoint():
         print(f'Saving results for test image at iteration {i}...')
         img_name = f'{i:05d}'
-        save_pictures(output_path, img_name, model, test_image)
+        save_pictures(output_path, img_name, model, test_image, distributed=gpus > 1)
 
         print(f'Saving model and optimizer state...')
         previous_name = 'previous_checkpoint'
@@ -55,6 +62,12 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
         print_time()
 
     def epoch_checkpoint():
+        old_epoch = e - 2
+        old_path = path.join(output_path, f'stats_{old_epoch}.pickle')
+        if path.exists(old_path):
+            print(f'Deleting old losses and batch times (from epoch {old_epoch})...')
+            os.remove(old_path)
+
         print('Saving losses and batch times...')
         torch.save({
             'class_loss': torch.tensor(class_losses),
@@ -62,12 +75,24 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
             'gauss_loss': torch.tensor(gauss_losses),
             'batch_times': torch.tensor(batch_times),
         }, path.join(output_path, f'stats_{e}.pickle'))
-        print(f'Saving model after epoch {e}...')
+
+        print('Evaluating...')
+        stats = evaluate(model, evalset, batch_size, num_workers, distributed=gpus > 1)
+        if stats['ap'] <= best['ap']:
+            print(f'No improvement in epoch {e} ({best["ap"]} at epoch {best["epoch"]} >= {stats["ap"]}')
+            print(f'-> Not saving the model! Epoch {e} finished!')
+            print_time()
+            return best
+
+        print(f'Improvement! Previous best: {best["ap"]} at epoch: {best["epoch"]}; Now {stats["ap"]} (epoch {e})')
+        stats['epoch'] = e
+        print(f'Saving model at epoch {e}...')
         out = path.join(output_path, f'epoch_{e}.tar')
-        save_model(out, model, optimizer, scheduler, epoch=e)
+        save_model(out, model, optimizer, scheduler, epoch=e, iteration=i, stats=stats)
 
         print(f'Epoch {e} finished!')
         print_time()
+        return stats
 
     torch.cuda.set_device(gpu)
     model = proposals.gln().cuda()
@@ -80,7 +105,7 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
         model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     
     optimizer = topt.SGD(model.parameters(), lr=0.002, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters w/ 1/5 lr
-    scheduler = topt.lr_scheduler.MultiStepLR(optimizer, milestones=[12, 18], gamma=0.1) # Something akin to RetinaNet learning rate adjustments
+    scheduler = topt.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5) # Halve learning rate every 10 epochs, loosely inspired by RetinaNet
 
     test_image, _ = dataset[0]
     sampler = distutils.DistributedSampler(dataset, num_replicas=gpus, rank=gpu) if gpus > 1 else None
@@ -98,6 +123,7 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
         reg_losses = []
         gauss_losses = []
         batch_times = []
+        best = {'epoch': -1, 'ap': 0.0}
         print(f'Training for {epochs} epochs, starting now!')
     while e < epochs:
         for batch in loader:
@@ -128,12 +154,15 @@ def train_proposal_generator(gpu, dataset, output_path, batch_size=1, num_worker
 
             del total_loss, loss, batch, images, targets # manual cleanup to get the most out of GPU memory
 
-            if first and i % 200 == 0:
+            if first and i % checkpoint_interval == 0:
                 checkpoint()
+            if i % checkpoint_interval == 0 and gpus > 1:
+                dist.barrier() # wait for rank 0 to checkpoint
 
             i += 1
 
         scheduler.step()
-        if first: epoch_checkpoint()
+        if first: best = epoch_checkpoint()
+        if gpus > 1: dist.barrier() # wait for rank 0 to eval and save
         e += 1
 
