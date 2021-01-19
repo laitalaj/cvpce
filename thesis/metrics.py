@@ -110,7 +110,12 @@ def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, tot
         )
         p, r = precision_and_recall(tp, fp, total_targets)
         f = f_score(p, r)
-        max_f, max_idx = f.max(0)
+        if len(f) > 0:
+            max_f, max_idx = f.max(0)
+            best_p = p[max_idx]
+            best_r = r[max_idx]
+        else:
+            max_f, best_p, best_r = 0.0, 0.0, 0.0
         res[t] = {
             'raw': {
                 'p': p,
@@ -118,8 +123,8 @@ def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, tot
                 'f': f
             },
             'f': max_f,
-            'p': p[max_idx],
-            'r': r[max_idx],
+            'p': best_p,
+            'r': best_r,
             'ap': average_precision(p, r),
         }
     return res
