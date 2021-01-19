@@ -42,7 +42,7 @@ def merge_matches(true_positives, false_positives, confidences, total_prediction
     merged_tp = torch.zeros(total_predictions)
     merged_fp = torch.zeros(total_predictions)
 
-    heap = [to_heap_element(0, conf, tp, fp) for conf, tp, fp in zip(confidences, true_positives, false_positives)]
+    heap = [to_heap_element(0, conf, tp, fp) for conf, tp, fp in zip(confidences, true_positives, false_positives) if len(conf) > 0]
     heapq.heapify(heap)
 
     for i in range(total_predictions):
@@ -62,8 +62,12 @@ def merge_matches(true_positives, false_positives, confidences, total_prediction
 def precision_and_recall(true_positives, false_positives, total_targets):
     true_positives = true_positives.cumsum(0)
     false_positives = false_positives.cumsum(0)
+
     precision = true_positives / (true_positives + false_positives)
-    recall = true_positives / total_targets
+    precision[torch.isnan(precision)] = 0
+
+    recall = true_positives / total_targets if total_targets > 0 else torch.zeros_like(true_positives)
+
     return precision, recall
 
 def f_score(precision, recall):
