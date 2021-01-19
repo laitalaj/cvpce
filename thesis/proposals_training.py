@@ -37,7 +37,8 @@ def save_model(out, model, optimizer, scheduler, **extra):
 def evaluate(model, dataset, batch_size, num_workers, threshold=.75, distributed=False):
     if distributed: model = model.module # unwrap the actual model underlying DDP as suggested in https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
     model.eval()
-    res = proposals_eval.evaluate_gln_async(model, dataset, thresholds=(threshold,), batch_size=batch_size, num_workers=num_workers, num_metric_processes=num_workers, plots=False)
+    # async evaluation doesn't currently work with multi-GPU training; see https://bugs.python.org/issue39959 ; https://github.com/python/cpython/pull/21516
+    res = proposals_eval.evaluate_gln_sync(model, dataset, thresholds=(threshold,), batch_size=batch_size, num_workers=num_workers, plots=False)
     model.train()
     return res[threshold]
 
