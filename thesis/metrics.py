@@ -167,12 +167,12 @@ def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
     output_queue = mp.Queue()
     out_pipe, in_pipe = mp.Pipe()
 
-    processes = [mp.Process(target=_image_processer, args=(input_queue, output_queue, iou_thresholds)) for _ in range(processes)]
-    processes.append(mp.Process(target=_metric_calculator, args=(output_queue, in_pipe, iou_thresholds)))
-    for p in processes:
-        p.start()
+    for _ in range(processes):
+        mp.Process(target=_image_processer, args=(input_queue, output_queue, iou_thresholds)).start()
 
-    return input_queue, out_pipe, processes
+    mp.Process(target=_metric_calculator, args=(output_queue, in_pipe, iou_thresholds)).start()
+
+    return input_queue, out_pipe
 
 def plot_prf(precision, recall, fscore):
     plt.plot(recall, precision, label='Precision')
