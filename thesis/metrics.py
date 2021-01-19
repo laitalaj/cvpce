@@ -163,13 +163,12 @@ def _metric_calculator(output_queue, pipe, iou_thresholds):
     pipe.send(res)
 
 def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
-    context = mp.get_context('spawn') # fork (default on Unix) doesn't play nice with multi-GPU training
-    input_queue = context.JoinableQueue()
-    output_queue = context.Queue()
-    out_pipe, in_pipe = context.Pipe()
+    input_queue = mp.JoinableQueue()
+    output_queue = mp.Queue()
+    out_pipe, in_pipe = mp.Pipe()
 
-    processes = [context.Process(target=_image_processer, args=(input_queue, output_queue, iou_thresholds)) for _ in range(processes)]
-    processes.append(context.Process(target=_metric_calculator, args=(output_queue, in_pipe, iou_thresholds)))
+    processes = [mp.Process(target=_image_processer, args=(input_queue, output_queue, iou_thresholds)) for _ in range(processes)]
+    processes.append(mp.Process(target=_metric_calculator, args=(output_queue, in_pipe, iou_thresholds)))
     for p in processes:
         p.start()
 
