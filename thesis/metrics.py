@@ -33,8 +33,8 @@ def check_matches(sorted_ious, indices, iou_threshold=0.5):
     return true_positive, false_positive
 
 def merge_matches(true_positives, false_positives, confidences, total_predictions=None): # assuming confidences sorted, e.g. matching t&fp order, here
-    def to_heap_element(idx, conf, tp, fp):
-        return (-conf[idx], idx, conf, tp, fp)
+    def to_heap_element(elem_id, idx, conf, tp, fp):
+        return (-conf[idx], elem_id, idx, conf, tp, fp) # elem_id included to break confidence ties
 
     if total_predictions is None:
         total_predictions = sum(len(t) for t in true_positives)
@@ -42,16 +42,16 @@ def merge_matches(true_positives, false_positives, confidences, total_prediction
     merged_tp = torch.zeros(total_predictions)
     merged_fp = torch.zeros(total_predictions)
 
-    heap = [to_heap_element(0, conf, tp, fp) for conf, tp, fp in zip(confidences, true_positives, false_positives) if len(conf) > 0]
+    heap = [to_heap_element(i, 0, conf, tp, fp) for i, (conf, tp, fp) in enumerate(zip(confidences, true_positives, false_positives)) if len(conf) > 0]
     heapq.heapify(heap)
 
     for i in range(total_predictions):
-        _, idx, conf, tp, fp = heap[0]
+        _, elem_id, idx, conf, tp, fp = heap[0]
         merged_tp[i] = tp[idx]
         merged_fp[i] = fp[idx]
         idx += 1
         if idx < len(conf):
-            heapq.heapreplace(heap, to_heap_element(idx, conf, tp, fp))
+            heapq.heapreplace(heap, to_heap_element(elem_id, idx, conf, tp, fp))
         else:
             heapq.heappop(heap)
 
