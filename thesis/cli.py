@@ -63,13 +63,16 @@ def visualize_coco(imgs, annotations):
     type=click.Choice(['normal', 'kant']),
     default='normal'
 )
-def visualize_sku110k(imgs, annotations, method):
+@click.option('--flip/--no-flip', default=False)
+def visualize_sku110k(imgs, annotations, method, flip):
     gauss_methods = {
-        'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal(), 'gauss_join_method': datautils.join_via_max},
-        'kant': {'gauss_generate_method': datautils.generate_via_kant_method(), 'gauss_join_method': datautils.join_via_replacement},
+        'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
+        'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
     }
     data = datautils.SKU110KDataset(imgs, annotations, **gauss_methods[method])
     img, anns = random.choice(data)
+    if flip:
+        img, anns = datautils.sku110k_flip(img, anns)
     utils.show(img, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
     utils.show(anns['gaussians'])
 
@@ -90,7 +93,7 @@ def iter_sku110k(imgs, annotations):
     for i, d in enumerate(loader):
         if i % 100 == 0:
             print(i)
-    
+
 
 @cli.command()
 @click.option(

@@ -6,7 +6,7 @@ import torch
 from torch.nn import functional as nnf
 from torch.utils import data as tdata
 from torch import distributions as tdist
-from torchvision.transforms.functional import to_tensor
+from torchvision.transforms import functional as ttf
 
 def join_via_addition(img, xx, yy, probs):
     img[yy, xx] += probs
@@ -68,6 +68,20 @@ def generate_gaussians(w, h, boxes, size_reduction=1, generate_method=generate_v
 
     return img
 
+def sku110k_flip(image, targets, gaussians = True):
+    image = ttf.hflip(image)
+
+    w = image.shape[-1]
+    flipped_boxes = targets['boxes'].clone()
+    flipped_boxes[:, 0] = w - flipped_boxes[:, 0]
+    flipped_boxes[:, 2] = w - flipped_boxes[:, 2]
+    targets['boxes'] = flipped_boxes
+
+    if gaussians:
+        targets['gaussians'] = ttf.hflip(targets['gaussians'])
+
+    return image, targets
+
 def sku110k_collate_fn(samples):
     return SKU110KBatch(samples)
 
@@ -99,13 +113,15 @@ class SKU110KBatch:
 
 class SKU110KDataset(tdata.Dataset):
     def __init__(self, img_dir_path, annotation_file_path, skip=[],
-    include_gaussians=True, gauss_generate_method=generate_via_multivariate_normal, gauss_join_method=join_via_max):
+    include_gaussians=True, gauss_generate_method=generate_via_multivariate_normal, gauss_join_method=join_via_max,
+    flip_chance=0.5): # TODO: more augmentation stuff
         super().__init__()
         self.img_dir = img_dir_path
         self.index = self.build_index(annotation_file_path, skip)
         self.include_gaussians = include_gaussians
         self.generate_method = gauss_generate_method
         self.join_method = gauss_join_method
+        self.flip_chance = flip_chance
     def build_index(self, annotation_file_path, skip):
         index = {}
         print('Building index...')
@@ -139,8 +155,10 @@ class SKU110KDataset(tdata.Dataset):
                 index_entry['image_width'], index_entry['image_height'], index_entry['boxes'],
                 generate_method=self.generate_method(), join_method=self.join_method
             )
+        if torch.rand(1) <= self.flip_chance:
+            img, index_entry = sku110k_flip(img, index_entry, self.include_gaussians)
         try:
-            return to_tensor(img), index_entry
+            return ttf.to_tensor(img), index_entry
         except OSError:
             print(f'WARNING: Malformed image: {index_entry["image_name"]}'
                 + f' - You\'ll probably want to explicitly skip this! Returning image 0 ({self.index[0]["image_name"]}) instead.')
