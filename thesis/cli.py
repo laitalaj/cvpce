@@ -246,20 +246,32 @@ def gln_build_assistant(gln, input_sizes):
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=11)
 @click.option('--gpus', type=int, default=1)
-def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus):
+@click.option('--load', default=None)
+def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus, load):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
     }
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, **gauss_methods[method])
     evalset = datautils.SKU110KDataset(imgs, eval_annotations, skip=SKU110K_SKIP, include_gaussians=False)
-    args = (dataset, evalset, out_dir, batch_size, dataloader_workers, epochs, gpus)
+
+    options = proposals_training.ProposalTrainingOptions()
+    options.dataset = dataset
+    options.evalset = evalset
+    options.output_path = out_dir
+    options.load = load
+    options.batch_size = batch_size
+    options.num_workers = dataloader_workers
+    options.epochs = epochs
+    options.gpus = gpus
+
+    args = (options,)
     if gpus > 1:
         if os.path.exists(utils.dist_init_file()): # Make sure that the initialization file is clean to avoid unforeseen consequences
             os.remove(utils.dist_init_file())
         mp.spawn(proposals_training.train_proposal_generator, args=args, nprocs=gpus)
     else:
-        proposals_training.train_proposal_generator(0, *args)
+        proposals_training.train_proposal_generator(0, options)
 
 @cli.command()
 @click.option(
