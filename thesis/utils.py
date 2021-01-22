@@ -47,3 +47,7 @@ def rel_path(*parts):
 
 def dist_init_file():
     return rel_path('dist_init')
+
+def trim_module_prefix(state_dict):
+    regex = re.compile(r'^module\.(.*)$')
+    return {regex.match(k).group(1): v for k, v in state_dict.items()}

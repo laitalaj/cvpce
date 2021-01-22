@@ -22,12 +22,17 @@ class ProposalTrainingOptions:
     dataset = None
     evalset = None
     output_path = None
+
     load = None
+    trim_module_prefix = False
+
     batch_size = 1
     num_workers = 2
+
     epochs = 1
-    gpus = 1
     checkpoint_interval = 200
+
+    gpus = 1
 
     def validate(self):
         assert self.dataset is not None, "Dataset must be set"
@@ -65,7 +70,8 @@ def save_pictures(out_path, name, model, img, distributed=False):
         utils.save(results['gaussians'].cpu(), path.join(out_path, f'{name}_gaussians.png'))
     model.train()
 
-def save_state(out, model, optimizer, scheduler, iteration, epoch, best):
+def save_state(out, model, optimizer, scheduler, iteration, epoch, best, distributed=False):
+    if distributed: model = model.module
     torch.save({
         MODEL_STATE_DICT_KEY: model.state_dict(),
         OPTIMIZER_STATE_DICT_KEY: optimizer.state_dict(),
@@ -97,7 +103,7 @@ def train_proposal_generator(gpu, options):
         current_path = path.join(options.output_path, f'{current_name}.tar')
         if path.exists(current_path):
             os.replace(current_path, previous_path)
-        save_state(current_path, model, optimizer, scheduler, i, e, best)
+        save_state(current_path, model, optimizer, scheduler, i, e, best, distributed=options.gpus > 1)
 
         print('Checkpoint!')
         print_time()
@@ -125,14 +131,14 @@ def train_proposal_generator(gpu, options):
                 print(f'No improvement in epoch {e} ({best["ap"]} at epoch {best["epoch"]} >= {stats["ap"]}')
                 if final:
                     print('-> Saving despite this due to being on the final iteration')
-                    save_state(out, model, optimizer, scheduler, i, e, best)
+                    save_state(out, model, optimizer, scheduler, i, e, best, distributed=options.gpus > 1)
                 else:
                     print('-> Not saving the model!')
             else:
                 print(f'Improvement! Previous best: {best["ap"]} at epoch: {best["epoch"]}; Now {stats["ap"]} (epoch {e})')
                 stats['epoch'] = e
                 print(f'Saving model at epoch {e}...')
-                save_state(out, model, optimizer, scheduler, i, e, stats)
+                save_state(out, model, optimizer, scheduler, i, e, stats, distributed=options.gpus > 1)
                 return stats
 
         print(f'Epoch {e} finished!')
@@ -148,7 +154,9 @@ def train_proposal_generator(gpu, options):
     torch.cuda.set_device(gpu)
     model = proposals.gln().cuda()
     if load:
-        model.load_state_dict(state[MODEL_STATE_DICT_KEY])
+        model.load_state_dict(
+            utils.trim_module_prefix(state[MODEL_STATE_DICT_KEY]) if options.trim_module_prefix else state[MODEL_STATE_DICT_KEY]
+        )
 
     if options.gpus > 1:
         dist.init_process_group(

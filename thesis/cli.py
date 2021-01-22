@@ -247,7 +247,8 @@ def gln_build_assistant(gln, input_sizes):
 @click.option('--epochs', type=int, default=11)
 @click.option('--gpus', type=int, default=1)
 @click.option('--load', default=None)
-def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus, load):
+@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
+def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus, load, trim_module_prefix):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
@@ -260,6 +261,7 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, 
     options.evalset = evalset
     options.output_path = out_dir
     options.load = load
+    options.trim_module_prefix = trim_module_prefix
     options.batch_size = batch_size
     options.num_workers = dataloader_workers
     options.epochs = epochs

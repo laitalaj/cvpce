@@ -10,8 +10,7 @@ def _load_gln(save_file, trim_module_prefix):
     state = torch.load(save_file)
     state_dict = state['model_state_dict']
     if trim_module_prefix:
-        regex = re.compile(r'^module\.(.*)$')
-        state_dict = {regex.match(k).group(1): v for k, v in state_dict.items()}
+        state_dict = utils.trim_module_prefix(state_dict)
     model = proposals.gln(pretrained_backbone=False).cuda()
     model.load_state_dict(state_dict)
     model.eval()
