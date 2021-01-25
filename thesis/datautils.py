@@ -71,10 +71,10 @@ def generate_gaussians(w, h, boxes, size_reduction=1, generate_method=generate_v
 def sku110k_flip(image, targets, gaussians = True):
     image = ttf.hflip(image)
 
-    w = image.shape[-1]
+    w = image.shape[-1] if torch.is_tensor(image) else image.width
     flipped_boxes = targets['boxes'].clone()
-    flipped_boxes[:, 0] = w - flipped_boxes[:, 0]
-    flipped_boxes[:, 2] = w - flipped_boxes[:, 2]
+    flipped_boxes[:, 0] = w - targets['boxes'][:, 2]
+    flipped_boxes[:, 2] = w - targets['boxes'][:, 0]
     targets['boxes'] = flipped_boxes
 
     if gaussians:
@@ -144,6 +144,11 @@ class SKU110KDataset(tdata.Dataset):
         res = list(index.values())
         print('Done!')
         return res
+    def index_for_name(self, name):
+        for i, entry in enumerate(self.index):
+            if entry['image_name'] == name:
+                return i
+        return None
     def __len__(self):
         return len(self.index)
     def __getitem__(self, i):

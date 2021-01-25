@@ -23,7 +23,12 @@ COCO_ANNOTATION_FILE = utils.rel_path(*DATA_DIR, 'coco', 'annotations', 'instanc
 
 SKU110K_IMG_DIR = utils.rel_path(*DATA_DIR, 'SKU110K_fixed', 'images')
 SKU110K_ANNOTATION_FILE = utils.rel_path(*DATA_DIR, 'SKU110K_fixed', 'annotations', 'annotations_val.csv')
-SKU110K_SKIP = ['test_274.jpg', 'train_882.jpg', 'train_924.jpg', 'train_4222.jpg', 'train_5822.jpg']
+SKU110K_SKIP = [
+    'test_274.jpg', 'train_882.jpg', 'train_924.jpg', 'train_4222.jpg', 'train_5822.jpg', # corrupted images, won't load, TODO: re-export test for fairness
+    'train_789.jpg', 'train_5007.jpg', 'train_6090.jpg', 'train_7576.jpg', # corrupted images, will load
+    'train_104.jpg', 'train_890.jpg', 'train_1296.jpg', 'train_3029.jpg', 'train_3530.jpg', 'train_3622.jpg', 'train_4899.jpg', 'train_6216.jpg', 'train_7880.jpg', # missing most ground truth boxes
+    'train_701.jpg', 'train_6566.jpg', # very poor images
+]
 
 OUT_DIR = utils.rel_path('out')
 
@@ -58,23 +63,30 @@ def visualize_coco(imgs, annotations):
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
     default=SKU110K_ANNOTATION_FILE
 )
+@click.option('--index')
 @click.option(
     '--method',
     type=click.Choice(['normal', 'kant']),
     default='normal'
 )
 @click.option('--flip/--no-flip', default=False)
-def visualize_sku110k(imgs, annotations, method, flip):
+@click.option('--gaussians/--no-gaussians', default=True)
+def visualize_sku110k(imgs, annotations, index, method, flip, gaussians):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
     }
-    data = datautils.SKU110KDataset(imgs, annotations, **gauss_methods[method])
-    img, anns = random.choice(data)
+    data = datautils.SKU110KDataset(imgs, annotations, flip_chance=0, **gauss_methods[method])
+    if index is None:
+        img, anns = random.choice(data)
+    else:
+        if isinstance(index, str):
+            index = data.index_for_name(index)
+        img, anns = data[index]
     if flip:
         img, anns = datautils.sku110k_flip(img, anns)
     utils.show(img, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
-    utils.show(anns['gaussians'])
+    if gaussians: utils.show(anns['gaussians'])
 
 @cli.command()
 @click.option(
@@ -93,7 +105,6 @@ def iter_sku110k(imgs, annotations):
     for i, d in enumerate(loader):
         if i % 100 == 0:
             print(i)
-
 
 @cli.command()
 @click.option(
@@ -303,6 +314,65 @@ def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, 
         batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix)
     for t in iou_threshold:
         print(f'{t}:\t{evaluation[t]}')
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option('--outlier-threshold', type=int, default=3)
+@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
+@click.argument('state-file',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+def seek_sku110k_outliers(imgs, annotations, outlier_threshold, trim_module_prefix, state_file):
+    def outliers(loss):
+        is_outlier = loss > loss.mean() + outlier_threshold * loss.std()
+        indices = is_outlier.nonzero(as_tuple=True)[0]
+        return set(indices)
+
+    dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP)
+
+    state_dict = torch.load(state_file)[proposals_training.MODEL_STATE_DICT_KEY]
+    if trim_module_prefix:
+        state_dict = utils.trim_module_prefix(state_dict)
+
+    model = proposals.gln().cuda()
+    model.load_state_dict(state_dict)
+
+    class_loss = torch.zeros(len(dataset), dtype=torch.float)
+    reg_loss = torch.zeros(len(dataset), dtype=torch.float)
+    gauss_loss = torch.zeros(len(dataset), dtype=torch.float)
+    with torch.no_grad():
+        for i, (img, target) in enumerate(dataset):
+            if i % 200 == 0:
+                print(f'{i}...')
+            img = img.cuda()[None]
+            target = [{k: v.cuda() if k in ['boxes', 'labels', 'gaussians'] else v for k, v in target.items()}]
+            loss = model(img, target)
+            class_loss[i] = loss['classification']
+            reg_loss[i] = loss['bbox_regression']
+            gauss_loss[i] = loss['gaussian']
+
+    outlier_indices = outliers(class_loss) | outliers(reg_loss) | outliers(gauss_loss)
+
+    print('-'*10)
+    print(f'Mean loss:\t{class_loss.mean()}\t{reg_loss.mean()}\t{gauss_loss.mean()}')
+    print(f'Std loss:\t{class_loss.std()}\t{reg_loss.std()}\t{gauss_loss.std()}')
+    print('-'*10)
+
+    if len(outlier_indices) == 0:
+        print('No outliers! Have a nice day!')
+    for i in outlier_indices:
+        _, entry = dataset[i]
+        print(f'Outlier at index {i}: {entry["image_name"]}')
+        print(f'\t{class_loss[i]}\t{reg_loss[i]}\t{gauss_loss[i]}')
 
 if __name__ == '__main__':
     cli()
