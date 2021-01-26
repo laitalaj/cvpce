@@ -39,6 +39,25 @@ def test_iou_matrices():
     assert expected_indices.equal(indices)
     assert expected_ious.allclose(ious)
 
+def test_iou_matrices_2():
+    expected_ious = torch.tensor([
+        [0.81, 0, 0],
+        [0.64, 0, 0],
+        [1, 0, 0],
+        [1/1.44, 0.1 / (1.44 + 1 - 0.1), 0.01 / (1.44 + 1 - 0.01)],
+        [0, 0, 0]
+    ], dtype=torch.float)
+    expected_indices = torch.tensor([
+        [0, 1, 2],
+        [1, 0, 2],
+        [0, 1, 2],
+        [2, 1, 0],
+        [0, 1, 2]
+    ])
+    ious, indices = metrics.iou_matrices(TARGETS[0], PREDICTIONS[0])
+    assert expected_indices.equal(indices)
+    assert expected_ious.allclose(ious)
+
 def test_check_matches():
     expected_tp = torch.tensor([1, 0, 0, 1, 0], dtype=torch.float)
     expected_fp = torch.ones_like(expected_tp) - expected_tp

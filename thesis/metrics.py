@@ -85,7 +85,7 @@ def average_precision(precision, recall):
     return values.mean()
 
 def _process_one(target, prediction, confidence, iou_thresholds):
-    confidence, sort_idx = torch.sort(confidence)
+    confidence, sort_idx = torch.sort(confidence, descending=True)
     prediction = prediction[sort_idx]
 
     iou_matrix, index_matrix = iou_matrices(target, prediction)

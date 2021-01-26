@@ -158,7 +158,8 @@ def gaussian_loss(predictions, targets, sizes, negative_threshold=0.0, positive_
 
 class GaussianLayerNetwork(RetinaNet):
     def __init__(self, resnet, num_classes, extra_fpn_block=LastLevelP6P7, transform_wrapper=SizeCapturingTransform, **kwargs):
-        super().__init__(BackboneWithFPNAndGaussians(resnet, extra_fpn_block), num_classes, **kwargs)
+        # detections_per_img: 1000 > 576 in SKU110K train, 718 in val, 533 in test > 300 (default)
+        super().__init__(BackboneWithFPNAndGaussians(resnet, extra_fpn_block), num_classes, detections_per_img=1000, **kwargs)
         self.transform = transform_wrapper(self.transform)
     def compute_loss(self, targets, head_outputs, anchors):
         loss = super().compute_loss(targets, head_outputs, anchors)

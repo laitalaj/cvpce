@@ -138,11 +138,13 @@ class SKU110KDataset(tdata.Dataset):
                     index[name] = {'image_name': name, 'image_width': int(img_width), 'image_height': int(img_height), 'boxes': []}
                 index[name]['boxes'].append(torch.tensor([int(coord) for coord in (x1, y1, x2, y2)]))
         print('Finishing up...')
+        max_annotations = 0
         for val in index.values():
+            max_annotations = max(len(val['boxes']), max_annotations)
             val['labels'] = torch.zeros(len(val['boxes']), dtype=torch.long)
             val['boxes'] = torch.stack(val['boxes'])
         res = list(index.values())
-        print('Done!')
+        print(f'Done! (max annotations in one image: {max_annotations})')
         return res
     def index_for_name(self, name):
         for i, entry in enumerate(self.index):
