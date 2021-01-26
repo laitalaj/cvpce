@@ -8,9 +8,16 @@ import matplotlib.patches as patches
 def recall_tensor(tensor):
     return tensor.detach().cpu().numpy()
 
-def plot_boxes(boxes, color='blue'):
+def plot_boxes(boxes, color='blue', hl_color = None, hl_width = 5):
+    hl_offset = (hl_width - 1) // 2
+    highlights = [patches.Rectangle((x, y), w, h) for x, y, w, h in boxes]
     boxes = [patches.Rectangle((x, y), w, h) for x, y, w, h in boxes]
+
+    if hl_color is None: hl_color = 'dark' + color
+    highlightcollection = pltcollections.PatchCollection(highlights, facecolor='none', edgecolor=hl_color, linewidth=hl_width)
     boxcollection = pltcollections.PatchCollection(boxes, facecolor='none', edgecolor=color)
+
+    plt.gca().add_collection(highlightcollection)
     plt.gca().add_collection(boxcollection)
 
 def plot_labels(labels, boxes, color='blue'):
@@ -18,8 +25,9 @@ def plot_labels(labels, boxes, color='blue'):
         x, y, _, _ = b
         plt.text(x + 1, y - 1, l, color=color, va='top', ha='left')
 
-def build_fig(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = []):
-    plt.figure()
+def build_fig(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = [], figsize=(12, 12)):
+    plt.figure(figsize=figsize)
+    plt.axis('off')
 
     if len(img.shape) == 2:
         img = img[None]
@@ -37,7 +45,7 @@ def show(img, detections = [], groundtruth = [], detection_labels = [], groundtr
 
 def save(img, out, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = []):
     build_fig(img, detections, groundtruth, detection_labels, groundtruth_labels)
-    plt.savefig(out)
+    plt.savefig(out, bbox_inches='tight')
     plt.close()
 
 def script_dir():

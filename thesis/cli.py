@@ -71,7 +71,8 @@ def visualize_coco(imgs, annotations):
 )
 @click.option('--flip/--no-flip', default=False)
 @click.option('--gaussians/--no-gaussians', default=True)
-def visualize_sku110k(imgs, annotations, index, method, flip, gaussians):
+@click.option('--save', type=click.Path(writable=True))
+def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, save):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
@@ -86,6 +87,8 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians):
     if flip:
         img, anns = datautils.sku110k_flip(img, anns)
     utils.show(img, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
+    if save is not None:
+        utils.save(img, save, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
     if gaussians: utils.show(anns['gaussians'])
 
 @cli.command()
