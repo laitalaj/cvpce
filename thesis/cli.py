@@ -71,8 +71,10 @@ def visualize_coco(imgs, annotations):
 )
 @click.option('--flip/--no-flip', default=False)
 @click.option('--gaussians/--no-gaussians', default=True)
+@click.option('--model', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True))
+@click.option('--conf-thresh', type=float, default=0.45)
 @click.option('--save', type=click.Path(writable=True))
-def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, save):
+def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, conf_thresh, save):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
@@ -86,7 +88,15 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, save):
         img, anns = data[index]
     if flip:
         img, anns = datautils.sku110k_flip(img, anns)
-    utils.show(img, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
+    prediction = []
+    if model is not None:
+        model = proposals_eval.load_gln(model, False)
+        model_result = model(img[None].cuda())
+        prediction = utils.recall_tensor(model_result[0]['boxes'][model_result[0]['scores'] > conf_thresh])
+    utils.show(img,
+        detections=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in prediction],
+        groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']]
+    ) # TODO: Torch has a built in function for converting between coordinate systems
     if save is not None:
         utils.save(img, save, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
     if gaussians: utils.show(anns['gaussians'])

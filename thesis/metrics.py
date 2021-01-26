@@ -41,6 +41,7 @@ def merge_matches(true_positives, false_positives, confidences, total_prediction
 
     merged_tp = torch.zeros(total_predictions)
     merged_fp = torch.zeros(total_predictions)
+    merged_conf = torch.zeros(total_predictions, dtype=torch.float)
 
     heap = [to_heap_element(i, 0, conf, tp, fp) for i, (conf, tp, fp) in enumerate(zip(confidences, true_positives, false_positives)) if len(conf) > 0]
     heapq.heapify(heap)
@@ -49,6 +50,7 @@ def merge_matches(true_positives, false_positives, confidences, total_prediction
         _, elem_id, idx, conf, tp, fp = heap[0]
         merged_tp[i] = tp[idx]
         merged_fp[i] = fp[idx]
+        merged_conf[i] = conf[idx]
         idx += 1
         if idx < len(conf):
             heapq.heapreplace(heap, to_heap_element(elem_id, idx, conf, tp, fp))
@@ -57,7 +59,7 @@ def merge_matches(true_positives, false_positives, confidences, total_prediction
 
     assert len(heap) == 0, 'All lists were not fully merged, this should not happen! Was total_predictions correct?'
 
-    return merged_tp, merged_fp
+    return merged_tp, merged_fp, merged_conf
 
 def precision_and_recall(true_positives, false_positives, total_targets):
     true_positives = true_positives.cumsum(0)
@@ -102,7 +104,7 @@ def _process_one(target, prediction, confidence, iou_thresholds):
 def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets):
     res = {}
     for t in iou_thresholds:
-        tp, fp = merge_matches(
+        tp, fp, conf = merge_matches(
             matches_for_threshold[t]['true_positives'],
             matches_for_threshold[t]['false_positives'],
             sorted_confidences,
@@ -114,17 +116,20 @@ def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, tot
             max_f, max_idx = f.max(0)
             best_p = p[max_idx]
             best_r = r[max_idx]
+            conf_thresh = conf[max_idx]
         else:
-            max_f, best_p, best_r = 0.0, 0.0, 0.0
+            max_f, best_p, best_r, conf_thresh = 0.0, 0.0, 0.0, 0.0
         res[t] = {
             'raw': {
                 'p': p,
                 'r': r,
-                'f': f
+                'f': f,
+                'c': conf,
             },
             'f': max_f,
             'p': best_p,
             'r': best_r,
+            'c': conf_thresh,
             'ap': average_precision(p, r),
         }
     return res
@@ -183,7 +188,8 @@ def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
 
     return input_queue, out_pipe
 
-def plot_prf(precision, recall, fscore):
+def plot_prfc(precision, recall, fscore, confidence):
+    plt.plot(recall, confidence, label='Confidence')
     plt.plot(recall, precision, label='Precision')
     plt.plot(recall, fscore, label='$F_1$')
     plt.vlines(recall[fscore.argmax()], 0, 1, color='red', label='Max $F_1$')
