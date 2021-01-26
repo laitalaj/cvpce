@@ -317,14 +317,17 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, 
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--metric-workers', type=int, default=8)
 @click.option('--iou-threshold', '-t', type=float, multiple=True, default=(0.5,))
+@click.option('--coco/--no-coco', default=False)
 @click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
+@click.option('--plots/--no-plots', default=True)
 @click.argument('state-file',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
-def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, trim_module_prefix, state_file):
+def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, state_file):
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False)
-    evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=iou_threshold,
-        batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix)
+    thresholds = torch.linspace(.5, .95, 10) if coco else iou_threshold
+    evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=thresholds,
+        batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix, plots=plots)
     for t in iou_threshold:
         print(f'{t}:\t{evaluation[t]}')
 
