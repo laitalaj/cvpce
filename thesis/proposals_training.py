@@ -9,6 +9,7 @@ from torch import optim as topt
 from torch.utils.data import DataLoader, distributed as distutils
 
 from . import datautils, proposals_eval, utils
+from .utils import print_time
 from .models import proposals
 
 MODEL_STATE_DICT_KEY = 'model_state_dict'
@@ -54,9 +55,6 @@ def loader_and_test_img(gpu, options):
         shuffle=(options.gpus == 1), sampler=sampler
     )
     return loader, test_image
-
-def print_time():
-    print(f'-- {time.asctime(time.localtime())} --')
 
 def save_pictures(out_path, name, model, img, distributed=False):
     if distributed: model = model.module # unwrap the actual model underlying DDP as suggested in https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564

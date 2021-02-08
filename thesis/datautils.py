@@ -1,4 +1,4 @@
-import csv
+import csv, os
 from os import path
 
 import PIL as pil
@@ -7,6 +7,11 @@ from torch.nn import functional as nnf
 from torch.utils import data as tdata
 from torch import distributions as tdist
 from torchvision.transforms import functional as ttf
+from torchvision import utils as tvutils
+
+from . import utils
+
+## PROPOSALS ##
 
 def join_via_addition(img, xx, yy, probs):
     img[yy, xx] += probs
@@ -114,7 +119,7 @@ class SKU110KBatch:
 class SKU110KDataset(tdata.Dataset):
     def __init__(self, img_dir_path, annotation_file_path, skip=[],
     include_gaussians=True, gauss_generate_method=generate_via_multivariate_normal, gauss_join_method=join_via_max,
-    flip_chance=0.5): # TODO: more augmentation stuff
+    flip_chance=0.5): # TODO: more augmentation stuff, maybe?
         super().__init__()
         self.img_dir = img_dir_path
         self.index = self.build_index(annotation_file_path, skip)
@@ -170,3 +175,91 @@ class SKU110KDataset(tdata.Dataset):
             print(f'WARNING: Malformed image: {index_entry["image_name"]}'
                 + f' - You\'ll probably want to explicitly skip this! Returning image 0 ({self.index[0]["image_name"]}) instead.')
             return self[0]
+
+## CLASSIFICATION ##
+
+CLASSIFICATION_IMAGE_SIZE = 256
+
+class TargetDomainDataset(SKU110KDataset):
+    def __init__(self, img_dir_path, annotation_file_path, skip=[]):
+        super().__init__(img_dir_path, annotation_file_path, skip, include_gaussians=False, flip_chance=0)
+    def __getitem__(self, i):
+        img, index_entry = super().__getitem__(i)
+        _, img_h, img_w = img.shape
+
+        x1, y1, x2, y2 = index_entry['boxes'][torch.randint(len(index_entry['boxes']), (1,))][0] # TODO: Make this deterministic
+        w = min(img_w, x2) - max(0, x1)
+        h = min(img_h, y2) - max(0, y1)
+
+        larger_dim = max(w, h)
+        res = torch.full((3, larger_dim, larger_dim), 0.5) # 0.5 at 0 - 1 == 0 at 0 - -1
+        res[:, 0:h, 0:w] = img[:, y1:y2, x1:x2]
+
+        return ttf.resize(res, (CLASSIFICATION_IMAGE_SIZE, CLASSIFICATION_IMAGE_SIZE))
+
+def gp_collate_fn(samples):
+    emb_images, gen_images, categories = zip(*samples) # Returining two sets of images is a bit dirty, TODO check if you have better ideas later
+    return torch.stack(emb_images), torch.stack(gen_images), categories
+
+class GroceryProductsDataset(tdata.Dataset): # TODO: Actual classes -> problem is that food category is renamed, so will need to perform re-renaming :think:
+    def __init__(self, image_roots, skip=[['Background']], random_crop = True, min_cropped_size = 0.8):
+        super().__init__()
+        self.paths, self.categories = self.build_index(image_roots, skip)
+        self.random_crop = random_crop
+        self.min_cropped_size = min_cropped_size
+    def build_index(self, image_roots, skip):
+        print('Building index...')
+        paths = []
+        categories = []
+        skipped = []
+        for r in image_roots:
+            print(f'Processing {r}...')
+            to_search = [r]
+            hierarchies = [[]]
+            while len(to_search):
+                current_path = to_search.pop()
+                current_hierarchy = hierarchies.pop()
+                if current_hierarchy in skip:
+                    continue
+                for entry in os.scandir(current_path):
+                    if entry.is_dir(follow_symlinks=False): # not following symlinks here to avoid possibily infinite looping
+                        to_search.append(entry.path)
+                        hierarchies.append(current_hierarchy + [entry.name])
+                    elif entry.is_file():
+                        try:
+                            pil.Image.open(entry.path)
+                        except OSError:
+                            skipped.append(entry.path)
+                            continue
+                        paths.append(entry.path)
+                        categories.append(current_hierarchy)
+            print(f'-> Index size: {len(paths)}')
+        print(f'Index built! Skipped a total of {len(skipped)} files due to not being image files openable with pillow')
+        return paths, categories
+    def tensorize(self, img, tanh=False):
+        new_size = (CLASSIFICATION_IMAGE_SIZE, round(CLASSIFICATION_IMAGE_SIZE * img.width / img.height)) if img.height > img.width \
+            else (round(CLASSIFICATION_IMAGE_SIZE * img.height / img.width), CLASSIFICATION_IMAGE_SIZE)
+        img = ttf.resize(img, new_size)
+
+        w, h = img.width, img.height
+        img = ttf.to_tensor(img)
+        if tanh:
+            img = utils.scale_to_tanh(img)
+        return ttf.pad(img, (0, 0, CLASSIFICATION_IMAGE_SIZE - w, CLASSIFICATION_IMAGE_SIZE - h), fill=0 if tanh else 0.5)
+    def __len__(self):
+        return len(self.paths)
+    def __getitem__(self, i):
+        path = self.paths[i]
+        img = pil.Image.open(path)
+
+        if self.random_crop:
+            w_ratio = self.min_cropped_size + torch.rand(1) * (1 - self.min_cropped_size)
+            min_h_ratio = self.min_cropped_size / w_ratio
+            h_ratio = min_h_ratio + torch.rand(1) * (1 - min_h_ratio)
+            crop_size = (int(img.height * h_ratio), int(img.width * w_ratio))
+            crop_pos = (torch.randint(0, img.height - crop_size[0], (1,)).item(), torch.randint(0, img.width - crop_size[1], (1,)).item())
+            gen_img = ttf.crop(img, *crop_pos, *crop_size)
+        else:
+            gen_img = img
+
+        return self.tensorize(img), self.tensorize(gen_img, True), self.categories[i]

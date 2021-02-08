@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from . import datautils
 from . import utils
 from . import proposals_training, proposals_eval
+from . import classification_training
 from .models import proposals
 
 DATA_DIR = ('..', 'data')
@@ -29,6 +30,14 @@ SKU110K_SKIP = [
     'train_104.jpg', 'train_890.jpg', 'train_1296.jpg', 'train_3029.jpg', 'train_3530.jpg', 'train_3622.jpg', 'train_4899.jpg', 'train_6216.jpg', 'train_7880.jpg', # missing most ground truth boxes
     'train_701.jpg', 'train_6566.jpg', # very poor images
 ]
+
+GP_TRAIN_FOLDERS = (
+    utils.rel_path(*DATA_DIR, 'Grocery_products', 'Training'),
+    utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'extra_products'),
+)
+
+MODEL_DIR = ('..', 'models')
+PRETRAINED_GAN_FILE = utils.rel_path(*MODEL_DIR, 'pretrained_dihe_gan.tar')
 
 OUT_DIR = utils.rel_path('out')
 
@@ -100,6 +109,35 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, 
     if save is not None:
         utils.save(img, save, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
     if gaussians: utils.show(anns['gaussians'])
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+def visualize_discriminator_target(imgs, annotations):
+    data = datautils.TargetDomainDataset(imgs, annotations)
+    img = random.choice(data)
+    utils.show(img)
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+def visualize_gp(img_dir):
+    data = datautils.GroceryProductsDataset(img_dir)
+    img, gen_img, hier = random.choice(data)
+    print(' - '.join(hier))
+    utils.show_multiple([img, utils.scale_from_tanh(gen_img)])
 
 @cli.command()
 @click.option(
@@ -389,6 +427,82 @@ def seek_sku110k_outliers(imgs, annotations, outlier_threshold, trim_module_pref
         _, entry = dataset[i]
         print(f'Outlier at index {i}: {entry["image_name"]}')
         print(f'\t{class_loss[i]}\t{reg_loss[i]}\t{gauss_loss[i]}')
+
+@cli.command()
+@click.option(
+    '--source-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
+    '--target-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--target-annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option(
+    '--out-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
+    default=OUT_DIR
+)
+@click.option('--batch-size', type=int, default=16)
+@click.option('--dataloader-workers', type=int, default=4)
+@click.option('--epochs', type=int, default=1)
+def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs):
+    options = classification_training.ClassificationTrainingOptions()
+
+    options.dataset = datautils.GroceryProductsDataset(source_dir)
+    options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
+    options.output_path = out_dir
+    options.batch_size = batch_size
+    options.num_workers = dataloader_workers
+    options.epochs = epochs
+
+    classification_training.pretrain_gan(options)
+
+@cli.command()
+@click.option(
+    '--source-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
+    '--target-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--target-annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option(
+    '--out-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
+    default=OUT_DIR
+)
+@click.option('--batch-size', type=int, default=4)
+@click.option('--dataloader-workers', type=int, default=4)
+@click.option('--epochs', type=int, default=10)
+@click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
+def train_dihe(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs, load_gan):
+    options = classification_training.ClassificationTrainingOptions()
+
+    options.dataset = datautils.GroceryProductsDataset(source_dir)
+    options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
+    options.load_gan = load_gan
+    options.output_path = out_dir
+    options.batch_size = batch_size
+    options.num_workers = dataloader_workers
+    options.epochs = epochs
+
+    classification_training.train_dihe(options)
 
 if __name__ == '__main__':
     cli()
