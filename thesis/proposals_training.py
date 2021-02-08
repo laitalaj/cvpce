@@ -43,7 +43,7 @@ class ProposalTrainingOptions:
 
 def optimizer_and_scheduler(model):
     optimizer = topt.SGD(model.parameters(), lr=0.0025, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters w/ 1/4 learning rate
-    scheduler = topt.lr_scheduler.MultiplicativeLR(optimizer, lambda _: 0.95, verbose=True) # Slightly decay learning rate after every epoch, loosely inspired by RetinaNet
+    scheduler = topt.lr_scheduler.MultiplicativeLR(optimizer, lambda _: 0.99, verbose=True) # Slightly decay learning rate after every epoch, loosely inspired by RetinaNet
     return optimizer, scheduler
 
 def loader_and_test_img(gpu, options):
