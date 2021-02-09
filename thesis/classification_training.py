@@ -78,25 +78,25 @@ def zncc(images, templates):
             total += result
     return total / (reduce(lambda acc, val: acc * val, images.shape))
 
-def hierarchy_similarity(anchors, negatives):
-    assert len(anchors) == len(negatives), 'Anchors and negatives should be of the same length'
+def hierarchy_similarity(positives, negatives):
+    assert len(positives) == len(negatives), 'Anchors and negatives should be of the same length'
 
-    similarity = torch.empty(len(anchors), dtype=torch.float)
-    for i, (anchor, negative) in enumerate(zip(anchors, negatives)):
+    similarity = torch.empty(len(positives), dtype=torch.float)
+    for i, (positive, negative) in enumerate(zip(positives, negatives)):
         scored = False
-        for j, a in enumerate(anchor):
-            if j >= len(negative) or a != negative[j]:
-                similarity[i] = j / len(anchor)
+        for j, p in enumerate(positive):
+            if j >= len(negative) or p != negative[j]:
+                similarity[i] = j / len(positive)
                 scored = True
                 break
         if not scored:
             similarity[i] = 1
     return similarity
 
-def hierarchial_loss(anchor_emb, positive_emb, negative_emb, anchor_hier, negative_hier, min_margin, max_margin):
+def hierarchial_loss(anchor_emb, positive_emb, negative_emb, positive_hier, negative_hier, min_margin, max_margin):
     positive_dist = distance(anchor_emb, positive_emb)
     negative_dist = distance(anchor_emb, negative_emb)
-    similarity = hierarchy_similarity(anchor_hier, negative_hier).to(device = anchor_emb.device)
+    similarity = hierarchy_similarity(positive_hier, negative_hier).to(device = anchor_emb.device)
     margin = min_margin + (1 - similarity) * (max_margin - min_margin)
     loss = torch.clamp(positive_dist - negative_dist + margin, min=0)
     return loss.mean()
@@ -280,9 +280,9 @@ def train_dihe(options): # TODO: Multi-GPU
             gen_batch = gen_batch[:block_size].cuda(non_blocking = True)
             disc_batch = utils.scale_to_tanh(disc_batch.cuda(non_blocking = True))
 
-            anchors = batch[:block_size]
+            positives = batch[:block_size]
             negatives = batch[block_size:block_size*2]
-            anchor_hier = hierarchies[:block_size]
+            pos_hier = hierarchies[:block_size]
             neg_hier = hierarchies[block_size:block_size*2]
 
             fake = generator(gen_batch)
@@ -298,21 +298,21 @@ def train_dihe(options): # TODO: Multi-GPU
 
 
             emb_opt.zero_grad()
-            anchor_emb = embedder(anchors)
-            positive_emb = embedder(utils.scale_from_tanh(fake.detach()))
+            anchor_emb = embedder(utils.scale_from_tanh(fake.detach()))
+            positive_emb = embedder(positives)
             negative_emb = embedder(negatives)
-            loss = hierarchial_loss(anchor_emb, positive_emb, negative_emb, anchor_hier, neg_hier, options.min_margin, options.max_margin)
+            loss = hierarchial_loss(anchor_emb, positive_emb, negative_emb, pos_hier, neg_hier, options.min_margin, options.max_margin)
             loss.backward()
             emb_opt.step()
 
 
             gen_opt.zero_grad()
             pred_fake = discriminator(fake)
-            anchor_emb = embedder(anchors)
+            positive_emb = embedder(positives)
             fake_emb = embedder(utils.scale_from_tanh(fake))
             loss_adv = nnf.binary_cross_entropy(pred_fake, torch.ones_like(pred_fake))
-            loss_regularization = -zncc(fake, anchors) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
-            loss_emb = -distance(fake_emb, anchor_emb).mean()
+            loss_regularization = -zncc(fake, positives) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
+            loss_emb = -distance(fake_emb, positive_emb).mean()
             loss_total = loss_adv + loss_regularization + 0.1 * loss_emb # weighting from Tonioni
             loss_total.backward()
             gen_opt.step()
@@ -321,7 +321,7 @@ def train_dihe(options): # TODO: Multi-GPU
                 print(f'batch:{i}\tE:{loss:.4f}\tD[real:{loss_real:.4f}\tfake:{loss_fake:.4f}]\tG[adv:{loss_adv:.4f}\treg:{loss_regularization:.4f}\temb:{loss_emb:.4f}]')
 
             # keepin it clean
-            del disc_batch, batch, anchors, negatives, fake, pred_fake, pred_real
+            del disc_batch, batch, positives, negatives, fake, pred_fake, pred_real
             del loss, loss_fake, loss_real, loss_adv, loss_regularization, loss_emb, loss_total
             del anchor_emb, positive_emb, negative_emb, fake_emb
 
