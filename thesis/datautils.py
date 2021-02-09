@@ -256,9 +256,11 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Actual classes -> problem i
             w_ratio = self.min_cropped_size + torch.rand(1) * (1 - self.min_cropped_size)
             min_h_ratio = self.min_cropped_size / w_ratio
             h_ratio = min_h_ratio + torch.rand(1) * (1 - min_h_ratio)
-            crop_size = (int(img.height * h_ratio), int(img.width * w_ratio))
-            crop_pos = (torch.randint(0, img.height - crop_size[0], (1,)).item(), torch.randint(0, img.width - crop_size[1], (1,)).item())
-            gen_img = ttf.crop(img, *crop_pos, *crop_size)
+            crop_h = int(img.height * h_ratio)
+            crop_w = int(img.width * w_ratio)
+            crop_y = torch.randint(0, img.height - crop_h, (1,)).item() if crop_h < img.height else 0
+            crop_x = torch.randint(0, img.width - crop_w, (1,)).item() if crop_w < img.width else 0
+            gen_img = ttf.crop(img, crop_y, crop_x, crop_h, crop_w)
         else:
             gen_img = img
 
