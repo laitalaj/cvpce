@@ -1,4 +1,5 @@
 import re
+import os
 from os import path
 import time
 
@@ -123,6 +124,10 @@ def rel_path(*parts):
 
 def dist_init_file():
     return rel_path('dist_init')
+
+def ensure_dist_file_clean():
+    if path.exists(dist_init_file()): # Make sure that the initialization file is clean to avoid unforeseen consequences
+        os.remove(dist_init_file())
 
 def trim_module_prefix(state_dict):
     regex = re.compile(r'^module\.(.*)$')

@@ -334,8 +334,7 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, 
 
     args = (options,)
     if gpus > 1:
-        if os.path.exists(utils.dist_init_file()): # Make sure that the initialization file is clean to avoid unforeseen consequences
-            os.remove(utils.dist_init_file())
+        utils.ensure_dist_file_clean()
         mp.spawn(proposals_training.train_proposal_generator, args=args, nprocs=gpus)
     else:
         proposals_training.train_proposal_generator(0, options)
@@ -491,18 +490,27 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=10)
 @click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
-def train_dihe(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs, load_gan):
+@click.option('--load-enc', default=None)
+@click.option('--gpus', type=int, default=1)
+def train_dihe(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
     options = classification_training.ClassificationTrainingOptions()
 
     options.dataset = datautils.GroceryProductsDataset(source_dir)
     options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
+
     options.load_gan = load_gan
+    options.load_encoder = load_enc
     options.output_path = out_dir
     options.batch_size = batch_size
     options.num_workers = dataloader_workers
     options.epochs = epochs
+    options.gpus = gpus
 
-    classification_training.train_dihe(options)
+    if gpus > 1:
+        utils.ensure_dist_file_clean()
+        mp.spawn(classification_training.train_dihe, args=(options,), nprocs=gpus)
+    else:
+        classification_training.train_dihe(0, options)
 
 if __name__ == '__main__':
     cli()

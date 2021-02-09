@@ -54,7 +54,7 @@ def loader_and_test_img(gpu, options):
         collate_fn=datautils.sku110k_collate_fn, pin_memory=True,
         shuffle=(options.gpus == 1), sampler=sampler
     )
-    return loader, test_image
+    return loader, sampler, test_image
 
 def save_pictures(out_path, name, model, img, distributed=False):
     if distributed: model = model.module # unwrap the actual model underlying DDP as suggested in https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
@@ -169,7 +169,7 @@ def train_proposal_generator(gpu, options):
         scheduler.load_state_dict(state[SCHEDULER_STATE_DICT_KEY])
 
 
-    loader, test_image = loader_and_test_img(gpu, options)
+    loader, sampler, test_image = loader_and_test_img(gpu, options)
 
     first = gpu == 0
     start_epoch = state[EPOCH_KEY] + 1 if load else 0
@@ -188,6 +188,9 @@ def train_proposal_generator(gpu, options):
         del state # everything's been loaded, make sure that this doesn't consume any extra memory
 
     for e in epoch_range:
+        if options.gpus > 1:
+            sampler.set_epoch(e)
+
         for batch in loader:
             images, targets = batch.cuda(non_blocking = True)
 
