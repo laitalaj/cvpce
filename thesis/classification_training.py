@@ -331,9 +331,9 @@ def train_dihe(gpu, options): # TODO: Evaluation
             backend='nccl', init_method=f'file://{utils.dist_init_file()}',
             world_size=options.gpus, rank=gpu
         )
-        embedder = nn.parallel.DistributedDataParallel(embedder, device_ids=[gpu])
-        generator = nn.parallel.DistributedDataParallel(generator, device_ids=[gpu])
-        discriminator = nn.parallel.DistributedDataParallel(discriminator, device_ids=[gpu])
+        embedder = nn.parallel.DistributedDataParallel(embedder, device_ids=[gpu], process_group=dist.new_group())
+        generator = nn.parallel.DistributedDataParallel(generator, device_ids=[gpu], process_group=dist.new_group())
+        discriminator = nn.parallel.DistributedDataParallel(discriminator, device_ids=[gpu], process_group=dist.new_group())
 
     emb_opt = topt.Adam(embedder.parameters(), 1e-6) # Learning rates from the DIHE paper
     gen_opt = topt.Adam(generator.parameters(), 1e-5)
