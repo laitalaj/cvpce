@@ -334,14 +334,14 @@ def train_dihe(gpu, options): # TODO: Evaluation
         state = torch.load(options.load_encoder, map_location=map_location)
         embedder.load_state_dict(state[EMBEDDER_STATE_DICT_KEY])
 
-    if options.gpus > 1:
+    if options.gpus > 1: # TODO: Might be worth it to check which parts here are actually necessary; did a bunch of changes trying to get DDP working here (broadcast_buffers=False did the trick)
         dist.init_process_group(
             backend='nccl', init_method=f'file://{utils.dist_init_file()}',
             world_size=options.gpus, rank=gpu
         )
-        embedder = nn.parallel.DistributedDataParallel(embedder, device_ids=[gpu], process_group=dist.new_group())
-        generator = nn.parallel.DistributedDataParallel(generator, device_ids=[gpu], process_group=dist.new_group())
-        discriminator = nn.parallel.DistributedDataParallel(discriminator, device_ids=[gpu], process_group=dist.new_group())
+        embedder = nn.parallel.DistributedDataParallel(embedder, device_ids=[gpu], process_group=dist.new_group(), broadcast_buffers=False)
+        generator = nn.parallel.DistributedDataParallel(generator, device_ids=[gpu], process_group=dist.new_group(), broadcast_buffers=False)
+        discriminator = nn.parallel.DistributedDataParallel(discriminator, device_ids=[gpu], process_group=dist.new_group(), broadcast_buffers=False)
 
     emb_opt = topt.Adam(embedder.parameters(), 1e-6) # Learning rates from the DIHE paper
     gen_opt = topt.Adam(generator.parameters(), 1e-5)
