@@ -426,7 +426,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
             if first:
                 losses.record_encoder(loss)
 
-            if i % 50 == 0:
+            if first and i % 50 == 0:
                 print(f'batch:{i}\tE:{loss:.4f}\tD[real:{loss_real:.4f}\tfake:{loss_fake:.4f}]\tG[adv:{loss_adv:.4f}\treg:{loss_regularization:.4f}\temb:{loss_emb:.4f}]')
 
             # keepin it clean
