@@ -372,7 +372,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
         for batch, gen_batch, hierarchies in train_loader:
             block_size = len(batch) // 2
             if block_size == 0:
-                print(f'Got zero block size at iteration {i}, skipping!')
+                print(f'Got zero block size at iteration {i}, skipping!') #TODO: This might result in failures in a multi-gpu setting :think:
                 continue
 
             disc_batch = disc_loader.get_batch(block_size)
@@ -386,30 +386,9 @@ def train_dihe(gpu, options): # TODO: Evaluation
             pos_hier = hierarchies[:block_size]
             neg_hier = hierarchies[block_size:block_size*2]
 
-            fake = generator(gen_batch)
-
-            disc_opt.zero_grad()
-            pred_fake = discriminator(fake.detach())
-            pred_real = discriminator(disc_batch)
-            loss_fake = nnf.binary_cross_entropy(pred_fake, torch.zeros_like(pred_fake))
-            loss_real = nnf.binary_cross_entropy(pred_real, torch.ones_like(pred_real))
-            loss_total = loss_fake + loss_real
-            loss_total.backward()
-            disc_opt.step()
-            if first:
-                losses.record_discriminator(loss_real, loss_fake)
-
-            emb_opt.zero_grad()
-            anchor_emb = embedder(utils.scale_from_tanh(fake.detach()))
-            positive_emb = embedder(positives)
-            negative_emb = embedder(negatives)
-            loss = hierarchial_loss(anchor_emb, positive_emb, negative_emb, pos_hier, neg_hier, options.min_margin, options.max_margin)
-            loss.backward()
-            emb_opt.step()
-            if first:
-                losses.record_encoder(loss)
-
+            # generator
             gen_opt.zero_grad()
+            fake = generator(gen_batch)
             pred_fake = discriminator(fake)
             positive_emb = embedder(positives)
             fake_emb = embedder(utils.scale_from_tanh(fake))
@@ -421,6 +400,31 @@ def train_dihe(gpu, options): # TODO: Evaluation
             gen_opt.step()
             if first:
                 losses.record_generator(loss_adv, loss_regularization, loss_emb)
+
+            # discriminator
+            disc_opt.zero_grad()
+            fake = generator(gen_batch)
+            pred_fake = discriminator(fake)
+            pred_real = discriminator(disc_batch)
+            loss_fake = nnf.binary_cross_entropy(pred_fake, torch.zeros_like(pred_fake))
+            loss_real = nnf.binary_cross_entropy(pred_real, torch.ones_like(pred_real))
+            loss_total = loss_fake + loss_real
+            loss_total.backward()
+            disc_opt.step()
+            if first:
+                losses.record_discriminator(loss_real, loss_fake)
+
+            # encoder
+            emb_opt.zero_grad()
+            fake = generator(gen_batch)
+            anchor_emb = embedder(utils.scale_from_tanh(fake))
+            positive_emb = embedder(positives)
+            negative_emb = embedder(negatives)
+            loss = hierarchial_loss(anchor_emb, positive_emb, negative_emb, pos_hier, neg_hier, options.min_margin, options.max_margin)
+            loss.backward()
+            emb_opt.step()
+            if first:
+                losses.record_encoder(loss)
 
             if i % 50 == 0:
                 print(f'batch:{i}\tE:{loss:.4f}\tD[real:{loss_real:.4f}\tfake:{loss_fake:.4f}]\tG[adv:{loss_adv:.4f}\treg:{loss_regularization:.4f}\temb:{loss_emb:.4f}]')
