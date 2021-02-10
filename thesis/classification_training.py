@@ -304,8 +304,14 @@ def train_dihe(gpu, options): # TODO: Evaluation
         print('Checkpoint!')
         utils.print_time()
     def epoch_checkpoint():
-        print('Saving losses and batch times...')
-        losses.save(path.join(options.output_path, f'stats_{e}.pickle'))
+        print('Saving losses...')
+        previous_name = 'previous_stats.pickle'
+        current_name = 'stats.pickle'
+        previous_path = path.join(options.output_path, previous_name)
+        current_path = path.join(options.output_path, current_name)
+        if path.exists(current_path):
+            os.replace(current_path, previous_path)
+        losses.save(current_path)
         print(f'Epoch {e} finished!')
         utils.print_time()
 
