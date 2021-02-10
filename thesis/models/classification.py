@@ -16,21 +16,28 @@ class AveragingPatchGAN(nn.Module):
         x = self.activation(x)
         return x.mean((1, 2))
 
-class MACVGG(vgg.VGG): # TODO: Grad off from unnecessary layers
-    def __init__(self, config = 'D', convs_per_block = [2, 2, 3, 3, 3], batch_norm = True):
-        super().__init__(vgg.make_layers(vgg.cfgs[config], batch_norm=batch_norm), init_weights=False)
+class MACVGG(nn.Module): # TODO: calc convs_per_block based on the actual config
+    def __init__(self, config = 'D', convs_per_block = [2, 2, 3, 3, 3], batch_norm = True, vgg_state_dict = None):
+        super().__init__()
+
+        source_vgg = vgg.VGG(vgg.make_layers(vgg.cfgs[config], batch_norm=batch_norm), init_weights=vgg_state_dict is None)
+        if vgg_state_dict is not None:
+            source_vgg.load_state_dict(vgg_state_dict)
 
         layers_per_conv = 3 if batch_norm else 2 # conv, batch norm (conditionally), relu
         layers_per_block = [convs * layers_per_conv + 1 for convs in convs_per_block] # +1 for max pool
-        self.cutoff_1 = sum(layers_per_block[:-1]) - 1 # last relu of second-to-last block
-        self.cutoff_2 = sum(layers_per_block) - 1 # last relu of last block
+        cutoff_1 = sum(layers_per_block[:-1]) - 1 # last relu of second-to-last block
+        cutoff_2 = sum(layers_per_block) - 1 # last relu of last block
+
+        self.block1 = source_vgg.features[:cutoff_1]
+        self.block2 = source_vgg.features[cutoff_1 : cutoff_2]
     def forward(self, x, eps = 1e-8):
-        x = self.features[:self.cutoff_1](x)
+        x = self.block1(x)
         desc_1 = x.amax(dim=(-2, -1))
-        x = self.features[self.cutoff_1 : self.cutoff_2](x)
+        x = self.block2(x)
         desc_2 = x.amax(dim=(-2, -1))
         desc = torch.cat((desc_1, desc_2), dim=1)
-        return desc / max(tla.norm(desc), eps)
+        return desc / tla.norm(desc).clamp(min=eps)
 
 def distance(emb1, emb2, dim = 1):
     return 1 - nnf.cosine_similarity(emb1, emb2, dim=dim)
@@ -52,11 +59,9 @@ def macvgg_embedder(model = 'vgg16_bn', pretrained = True, progress = True):
     if model not in model_to_config:
         raise NotImplementedError(f'MACVGG not implemented for {model}')
 
-    embedder = MACVGG(model_to_config[model])
-    if pretrained:
-        state_dict = tvutils.load_state_dict_from_url(vgg.model_urls[model], progress=progress)
-        embedder.load_state_dict(state_dict)
-    
+    state_dict = tvutils.load_state_dict_from_url(vgg.model_urls[model], progress=progress) if pretrained else None
+    embedder = MACVGG(model_to_config[model], vgg_state_dict=state_dict)
+
     return embedder
 
 def unet_generator():
