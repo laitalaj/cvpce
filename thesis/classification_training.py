@@ -311,6 +311,8 @@ def train_dihe(gpu, options): # TODO: Evaluation
 
     assert options.load_gan is not None, 'DIHE training should have a pretrained GAN'
 
+    torch.cuda.set_device(gpu)
+
     embedder = classification.macvgg_embedder().cuda()
     generator = classification.unet_generator().cuda()
     discriminator = classification.patchgan_discriminator().cuda()
