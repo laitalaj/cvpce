@@ -180,6 +180,13 @@ class SKU110KDataset(tdata.Dataset):
 
 CLASSIFICATION_IMAGE_SIZE = 256
 
+def resize_for_classification(img):
+    _, h, w = img.shape
+    larger_dim = max(w, h)
+    res = torch.full((3, larger_dim, larger_dim), 0.5)
+    res[:, 0:h, 0:w] = img
+    return ttf.resize(res, (CLASSIFICATION_IMAGE_SIZE, CLASSIFICATION_IMAGE_SIZE))
+
 class TargetDomainDataset(SKU110KDataset):
     def __init__(self, img_dir_path, annotation_file_path, skip=[]):
         super().__init__(img_dir_path, annotation_file_path, skip, include_gaussians=False, flip_chance=0)

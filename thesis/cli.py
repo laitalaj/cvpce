@@ -18,7 +18,8 @@ from . import datautils
 from . import utils
 from . import proposals_training, proposals_eval
 from . import classification_training
-from .models import proposals
+from . import production
+from .models import proposals, classification
 
 DATA_DIR = ('..', 'data')
 
@@ -45,6 +46,7 @@ GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'annotations')
 
 MODEL_DIR = ('..', 'models')
 PRETRAINED_GAN_FILE = utils.rel_path(*MODEL_DIR, 'pretrained_dihe_gan.tar')
+ENCODER_FILE = utils.rel_path(*MODEL_DIR, 'encoder.tar')
 
 OUT_DIR = utils.rel_path('out')
 
@@ -597,6 +599,55 @@ def train_dihe(source_dir, target_imgs, target_annotations, out_dir, batch_size,
         mp.spawn(classification_training.train_dihe, args=(options,), nprocs=gpus)
     else:
         classification_training.train_dihe(0, options)
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
+    '--test-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option('--batch-size', type=int, default=8)
+@click.option('--dataloader-workers', type=int, default=8)
+@click.option('--enc-weights', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=ENCODER_FILE)
+def eval_dihe(img_dir, test_imgs, annotations, batch_size, dataloader_workers, enc_weights):
+    sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+
+    encoder = classification.macvgg_embedder(pretrained=False)
+    state = torch.load(enc_weights)
+    encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
+
+    print('Preparing classifier...')
+    classifier = production.Classifier(encoder, sampleset, batch_size=batch_size, num_workers=dataloader_workers)
+
+    total = 0
+    correct = 0
+
+    testset = datautils.GroceryProductsTestSet(test_imgs, annotations)
+    print('Eval start!')
+    for i, (img, target_anns, boxes) in enumerate(testset):
+        if i % 10 == 0:
+            print(f'{i}...')
+
+        boxes = tvops.clip_boxes_to_image(boxes, (img.shape[1], img.shape[2]))
+        imgs = torch.stack([datautils.resize_for_classification(img[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in boxes])
+        pred_anns = classifier.classify(imgs)
+
+        total += len(target_anns)
+        for a1, a2 in zip(target_anns, pred_anns):
+            if a1 == a2: correct += 1
+
+    print(f'Total annotations: {total}, Correctly guessed: {correct}, Accuracy: {correct / total:.4f}')
 
 if __name__ == '__main__':
     cli()
