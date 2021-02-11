@@ -30,7 +30,7 @@ def plot_boxes(boxes, color='blue', hl_color = None, hl_width = 5):
 def plot_labels(labels, boxes, color='blue'):
     for l, b in zip(labels, boxes):
         x, y, _, _ = b
-        plt.text(x + 1, y - 1, l, color=color, va='top', ha='left')
+        plt.text(x + 12, y + 12, l, color=color, va='top', ha='left', fontweight='bold')
 
 def build_fig(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = [], figsize=(12, 12)):
     plt.figure(figsize=figsize)

@@ -1,5 +1,7 @@
 import os
 import random
+import re
+import shutil
 
 import click
 import torch
@@ -8,6 +10,7 @@ import torch.utils.tensorboard as tboard
 import pycocotools.cocoeval as cocoeval
 import torchvision.models as tmodels
 import torchvision.datasets as dsets
+import torchvision.ops as tvops
 import torchvision.transforms as tforms
 from torch.utils.data import DataLoader
 
@@ -31,10 +34,14 @@ SKU110K_SKIP = [
     'train_701.jpg', 'train_6566.jpg', # very poor images
 ]
 
+
+GP_ROOT = (*DATA_DIR, 'Grocery_products')
 GP_TRAIN_FOLDERS = (
-    utils.rel_path(*DATA_DIR, 'Grocery_products', 'Training'),
+    utils.rel_path(*GP_ROOT, 'Training'),
     utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'extra_products'),
 )
+GP_TEST_DIR = utils.rel_path(*GP_ROOT, 'Testing')
+GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'annotations')
 
 MODEL_DIR = ('..', 'models')
 PRETRAINED_GAN_FILE = utils.rel_path(*MODEL_DIR, 'pretrained_dihe_gan.tar')
@@ -134,10 +141,89 @@ def visualize_discriminator_target(imgs, annotations):
     default=GP_TRAIN_FOLDERS
 )
 def visualize_gp(img_dir):
-    data = datautils.GroceryProductsDataset(img_dir)
-    img, gen_img, hier = random.choice(data)
+    data = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+    img, gen_img, hier, ann = random.choice(data)
     print(' - '.join(hier))
+    print(ann)
     utils.show_multiple([img, utils.scale_from_tanh(gen_img)])
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option('--store', type=int)
+@click.option('--image', type=int)
+def visualize_gp_test(imgs, annotations, store, image):
+    dataset = datautils.GroceryProductsTestSet(imgs, annotations)
+    if store is None or image is None:
+        img, anns, boxes = random.choice(dataset)
+    else:
+        idx = dataset.get_index_for(store, image)
+        if idx is None:
+            print(f'No image or annotations for store {store}, image {image}')
+            return
+        img, anns, boxes = dataset[idx]
+    utils.show(img, groundtruth=tvops.box_convert(boxes, 'xyxy', 'xywh'), groundtruth_labels=anns)
+
+@cli.command()
+@click.option(
+    '--source-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=utils.rel_path(*GP_ROOT, 'Training', 'Food')
+)
+@click.option(
+    '--out-dir', type=click.Path(exists=False), default=utils.rel_path(*GP_ROOT, 'Training', 'Food_Fixed')
+)
+@click.option('--dry-run/--no-dry-run', default=False)
+def fix_gp(source_dir, out_dir, dry_run):
+    renamed_re = re.compile(r'food_(\d+).jpg')
+    to_search = [source_dir]
+    hierarchies = [[]]
+    print('Fixing GP...')
+    while len(to_search):
+        current_path = to_search.pop()
+        current_hierarchy = hierarchies.pop()
+        print(f'{current_path}...')
+
+        files = []
+        for entry in os.scandir(current_path):
+            if entry.is_dir(follow_symlinks=False): # not following symlinks here to avoid possibily infinite looping
+                to_search.append(entry.path)
+                hierarchies.append(current_hierarchy + [entry.name])
+            elif entry.is_file():
+                match = renamed_re.match(entry.name)
+                if match is None: continue
+                files.append((int(match.group(1)), entry))
+
+        if not files: continue
+
+        _, files = zip(*sorted(files))
+        new_names = sorted([f'{i}.jpg' for i in range(1, len(files))]) # the original annotations have JPGs and jpegs, but Tonioni's use only jpgs
+
+        out_path = os.path.join(out_dir, *current_hierarchy)
+        if dry_run:
+            i = 0
+        else:
+            os.makedirs(out_path)
+        print(f'{"(Not) " if dry_run else ""}Copying {len(files) - 1} files to {out_path}...')
+        for f, new in zip(files[1:], new_names): # the first entry is always garbage
+            if dry_run:
+                if i == 0:
+                    print(f'{f.path} -> {os.path.join(out_path, new)}')
+                    i = 25
+                else:
+                    i -= 1
+            else:
+                shutil.copy(f.path, os.path.join(out_path, new))
+    print('Done!')
+
 
 @cli.command()
 @click.option(

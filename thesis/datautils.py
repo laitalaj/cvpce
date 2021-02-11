@@ -1,4 +1,4 @@
-import csv, os
+import csv, os, re
 from os import path
 
 import PIL as pil
@@ -201,17 +201,25 @@ def gp_collate_fn(samples):
     emb_images, gen_images, categories = zip(*samples) # Returining two sets of images is a bit dirty, TODO check if you have better ideas later
     return torch.stack(emb_images), torch.stack(gen_images), categories
 
-class GroceryProductsDataset(tdata.Dataset): # TODO: Actual classes -> problem is that food category is renamed, so will need to perform re-renaming :think:
-    def __init__(self, image_roots, skip=[['Background']], random_crop = True, min_cropped_size = 0.8):
+def gp_annotated_collate_fn(samples):
+    emb_images, gen_images, categories, annotations = zip(*samples)
+    return torch.stack(emb_images), torch.stack(gen_images), categories, annotations
+
+class GroceryProductsDataset(tdata.Dataset):
+    def __init__(self, image_roots, skip=[['Background']],
+        random_crop = True, min_cropped_size = 0.8,
+        test_can_load = False, include_annotations = False):
         super().__init__()
-        self.paths, self.categories = self.build_index(image_roots, skip)
+        self.paths, self.categories, self.annotations = self.build_index(image_roots, skip, test_can_load)
         self.random_crop = random_crop
         self.min_cropped_size = min_cropped_size
-    def build_index(self, image_roots, skip):
+        self.include_annotations = include_annotations
+    def build_index(self, image_roots, skip, test_can_load):
         print('Building index...')
         paths = []
         categories = []
-        skipped = []
+        annotations = []
+        if test_can_load: skipped = []
         for r in image_roots:
             print(f'Processing {r}...')
             to_search = [r]
@@ -226,16 +234,23 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Actual classes -> problem i
                         to_search.append(entry.path)
                         hierarchies.append(current_hierarchy + [entry.name])
                     elif entry.is_file():
-                        try:
-                            pil.Image.open(entry.path)
-                        except OSError:
-                            skipped.append(entry.path)
-                            continue
+                        if entry.name in ('.DS_Store', 'index.txt', 'TrainingClassesIndex.mat'): continue
+                        if test_can_load:
+                            try:
+                                pil.Image.open(entry.path)
+                            except OSError:
+                                skipped.append(entry.path)
+                                continue
                         paths.append(entry.path)
                         categories.append(current_hierarchy)
+                        annotations.append('/'.join([*current_hierarchy, entry.name]))
             print(f'-> Index size: {len(paths)}')
-        print(f'Index built! Skipped a total of {len(skipped)} files due to not being image files openable with pillow')
-        return paths, categories
+        print('Index built!')
+        if test_can_load and skipped:
+            print(f'Skipped a total of {len(skipped)} files due to not being image files openable with pillow')
+            if len(skipped) < 10:
+                print(f'(Skipped: {skipped})')
+        return paths, categories, annotations
     def tensorize(self, img, tanh=False):
         new_size = (CLASSIFICATION_IMAGE_SIZE, round(CLASSIFICATION_IMAGE_SIZE * img.width / img.height)) if img.height > img.width \
             else (round(CLASSIFICATION_IMAGE_SIZE * img.height / img.width), CLASSIFICATION_IMAGE_SIZE)
@@ -264,4 +279,55 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Actual classes -> problem i
         else:
             gen_img = img
 
-        return self.tensorize(img), self.tensorize(gen_img, True), self.categories[i]
+        if self.include_annotations:
+            return self.tensorize(img), self.tensorize(gen_img, True), self.categories[i], self.annotations[i]
+        else:
+            return self.tensorize(img), self.tensorize(gen_img, True), self.categories[i]
+
+class GroceryProductsTestSet(tdata.Dataset):
+    def __init__(self, image_dir, ann_dir):
+        super().__init__()
+        self.image_dir = image_dir
+        self.index = self.build_index(ann_dir)
+    def get_image_path(self, store, image):
+        return path.join(self.image_dir, f'store{store}', 'images', f'store{store}_{image}.jpg')
+    def build_index(self, ann_dir):
+        ann_file_re = re.compile(r'^s(\d+)_(\d+)\.csv$')
+        index = []
+        for entry in os.scandir(ann_dir):
+            if not entry.is_file(): continue
+
+            match = ann_file_re.match(entry.name)
+            if match is None: continue
+
+            anns = []
+            boxes = []
+            with open(entry.path, 'r') as annotation_file:
+                annotation_reader = csv.reader(annotation_file, skipinitialspace=True)
+                for row in annotation_reader:
+                    if len(row) != 5:
+                        print(f'Malformed annotation row in file {entry.name}: {row}; skipping')
+                        continue
+                    ann, x1, y1, x2, y2 = row
+                    anns.append(ann)
+                    boxes.append([int(coord) for coord in (x1, y1, x2, y2)])
+
+            index.append({
+                'path': self.get_image_path(match.group(1), match.group(2)),
+                'anns': anns,
+                'boxes': torch.tensor(boxes),
+            })
+        
+        return index
+    def get_index_for(self, store, image):
+        target_path = self.get_image_path(store, image)
+        for i, idx in enumerate(self.index):
+            if idx['path'] == target_path:
+                return i
+        return None
+    def __len__(self):
+        return len(self.index)
+    def __getitem__(self, i):
+        index_entry = self.index[i]
+        img = pil.Image.open(index_entry['path'])
+        return ttf.to_tensor(img), index_entry['anns'], index_entry['boxes']
