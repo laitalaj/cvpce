@@ -444,4 +444,4 @@ def train_dihe(gpu, options): # TODO: Evaluation
         if first: epoch_checkpoint()
         if options.gpus > 1: dist.barrier()
 
-    checkpoint()
+    if first: checkpoint()
