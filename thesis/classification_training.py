@@ -332,22 +332,26 @@ def train_dihe(gpu, options): # TODO: Evaluation
         current_path = path.join(options.output_path, current_name)
         losses.save(current_path)
 
+        distributed = options.gpus > 1
         if e % 3 == 0 or final: # TODO: Configurability
             out = path.join(options.output_path, f'epoch_{e}.tar')
+            gan_out = path.join(options.output_path, f'epoch_{e}_gan.tar')
             print('Evaluating...')
-            accuracy = evaluate_dihe(embedder, options, options.gpus > 1)
+            accuracy = evaluate_dihe(embedder, options, distributed)
             if accuracy <= best['accuracy']:
                 print(f'No improvement in epoch {e} ({best["accuracy"]:.4f} at epoch {best["epoch"]} >= {accuracy:.4f}')
                 if final:
                     print('-> Saving despite this due to being on the final iteration')
-                    save_embedder_state(out, embedder, emb_opt, i, e, best, distributed=options.gpus > 1) # TODO: Also save GAN
+                    save_embedder_state(out, embedder, emb_opt, i, e, best, distributed=distributed)
+                    save_gan_state(gan_out, generator, gen_opt, discriminator, disc_opt, i, e, distributed=distributed)
                 else:
                     print('-> Not saving the model!')
             else:
                 print(f'Improvement! Previous best: {best["accuracy"]:.4f} at epoch: {best["epoch"]}; Now {accuracy:.4f} (epoch {e})')
                 stats = {'accuracy': accuracy, 'epoch': e}
                 print(f'Saving model at epoch {e}...')
-                save_embedder_state(out, embedder, emb_opt, i, e, stats, distributed=options.gpus > 1)
+                save_embedder_state(out, embedder, emb_opt, i, e, stats, distributed=distributed)
+                save_gan_state(gan_out, generator, gen_opt, discriminator, disc_opt, i, e, distributed=distributed)
                 return stats
 
         print(f'Epoch {e} finished!')
