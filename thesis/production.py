@@ -11,7 +11,6 @@ class Classifier:
         self.device = device
 
         self.encoder = encoder.to(device=self.device)
-        self.encoder.requires_grad_(False)
         self.encoder.eval()
 
         self.embedding, self.annotations = self.build_index(sample_set)
