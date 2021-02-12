@@ -352,6 +352,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
                 print(f'Saving model at epoch {e}...')
                 save_embedder_state(out, embedder, emb_opt, i, e, stats, distributed=distributed)
                 save_gan_state(gan_out, generator, gen_opt, discriminator, disc_opt, i, e, distributed=distributed)
+                print(f'Epoch {e} finished!')
                 return stats
 
         print(f'Epoch {e} finished!')
