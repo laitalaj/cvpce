@@ -292,17 +292,23 @@ class GroceryProductsDataset(tdata.Dataset):
             return self.tensorize(img), self.tensorize(gen_img, True), self.categories[i]
 
 class GroceryProductsTestSet(tdata.Dataset):
-    def __init__(self, image_dir, ann_dir):
+    def __init__(self, image_dir, ann_dir, only=None, skip=None):
+        if only is not None and skip is not None:
+            raise NotImplementedError('Can\'t have both only and skip in GroceryProductsTestSet!')
+
         super().__init__()
         self.image_dir = image_dir
-        self.index = self.build_index(ann_dir)
+        self.index = self.build_index(ann_dir, only, skip)
     def get_image_path(self, store, image):
         return path.join(self.image_dir, f'store{store}', 'images', f'store{store}_{image}.jpg')
-    def build_index(self, ann_dir):
+    def build_index(self, ann_dir, only, skip):
         ann_file_re = re.compile(r'^s(\d+)_(\d+)\.csv$')
         index = []
         for entry in os.scandir(ann_dir):
             if not entry.is_file(): continue
+
+            if only is not None and entry.name not in only: continue
+            if skip is not None and entry.name in skip: continue
 
             match = ann_file_re.match(entry.name)
             if match is None: continue

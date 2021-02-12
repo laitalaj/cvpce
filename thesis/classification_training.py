@@ -9,7 +9,7 @@ from torch import nn
 from torch.nn import functional as nnf
 from torch.utils.data import DataLoader, distributed as distutils
 
-from . import datautils, utils
+from . import datautils, utils, classification_eval
 from .models import classification
 from .models.classification import distance
 
@@ -21,10 +21,12 @@ GEN_OPTIMIZER_STATE_DICT_KEY = 'gen_optimizer_state_dict'
 DISC_OPTIMIZER_STATE_DICT_KEY = 'disc_optimizer_state_dict'
 EPOCH_KEY = 'epoch'
 ITERATION_KEY = 'iteration'
+BEST_STATS_KEY = 'stats'
 
 class ClassificationTrainingOptions:
     dataset = None
-    disciminatorset = None
+    discriminatorset = None
+    evalset = None
     output_path = None
 
     load_encoder = None
@@ -42,10 +44,14 @@ class ClassificationTrainingOptions:
 
     gpus = 1
 
-    def validate(self):
+    def validate(self, pretraining = False):
         assert self.dataset is not None, "Dataset must be set"
-        assert self.disciminatorset is not None, "Discriminatorset must be set"
+        assert self.discriminatorset is not None, "Discriminatorset must be set"
         assert self.output_path is not None, "Output path must be set"
+        if not pretraining:
+            assert self.load_gan is not None, 'DIHE training should have a pretrained GAN'
+            assert self.evalset is not None, 'DIHE training should have a evaluation set'
+
 
 class DiscriminatorLoader:
     def __init__(self, options):
@@ -109,7 +115,7 @@ def loaders_and_test_images(gpu, options):
     train_sampler = distutils.DistributedSampler(options.dataset, num_replicas=options.gpus, rank=gpu) if options.gpus > 1 else None
     train_loader = DataLoader(options.dataset,
         batch_size=options.batch_size * 2, num_workers=options.num_workers, # batch size * 2: get both anchors and negatives
-        collate_fn=datautils.gp_collate_fn, pin_memory=True,
+        collate_fn=datautils.gp_annotated_collate_fn, pin_memory=True,
         shuffle=(options.gpus == 1), sampler=train_sampler
     )
 
@@ -194,14 +200,22 @@ def save_gan_state(out, generator, gen_optimizer, discriminator, disc_optimizer,
         EPOCH_KEY: epoch,
     }, out)
 
-def save_embedder_state(out, model, optimizer, iteration, epoch, distributed=False):
+def save_embedder_state(out, model, optimizer, iteration, epoch, best, distributed=False):
     if distributed: model = model.module
     torch.save({
         EMBEDDER_STATE_DICT_KEY: model.state_dict(),
         EMB_OPTIMIZER_STATE_DICT_KEY: optimizer.state_dict(),
         ITERATION_KEY: iteration,
         EPOCH_KEY: epoch,
+        BEST_STATS_KEY: best,
     }, out)
+
+def evaluate_dihe(model, options, distributed):
+    if distributed: model = model.module
+    model.eval()
+    accuracy = classification_eval.eval_dihe(model, options.dataset, options.evalset, options.batch_size, options.num_workers)
+    model.train()
+    return accuracy
 
 def pretrain_gan(options):
     def checkpoint():
@@ -220,6 +234,8 @@ def pretrain_gan(options):
 
         print('Checkpoint!')
         utils.print_time()
+
+    options.validate(pretraining = True)
 
     generator = classification.unet_generator().cuda() # Learning rates from the DIHE paper
     discriminator = classification.patchgan_discriminator().cuda()
@@ -299,23 +315,46 @@ def train_dihe(gpu, options): # TODO: Evaluation
         current_path = path.join(options.output_path, f'{current_name}.tar')
         if path.exists(current_path):
             os.replace(current_path, previous_path)
-        save_embedder_state(current_path, embedder, emb_opt, i, e, distributed=distributed)
+        save_embedder_state(current_path, embedder, emb_opt, i, e, best, distributed=distributed)
 
         print('Checkpoint!')
         utils.print_time()
-    def epoch_checkpoint():
+
+    def epoch_checkpoint(final = False):
+        old_epoch = e - 2
+        old_path = path.join(options.output_path, f'stats_{old_epoch}.pickle')
+        if path.exists(old_path):
+            print(f'Deleting old losses and batch times (from epoch {old_epoch})...')
+            os.remove(old_path)
+
         print('Saving losses...')
-        previous_name = 'previous_stats.pickle'
-        current_name = 'stats.pickle'
-        previous_path = path.join(options.output_path, previous_name)
+        current_name = f'stats_{e}.pickle'
         current_path = path.join(options.output_path, current_name)
-        if path.exists(current_path):
-            os.replace(current_path, previous_path)
         losses.save(current_path)
+
+        if e % 3 == 0 or final: # TODO: Configurability
+            out = path.join(options.output_path, f'epoch_{e}.tar')
+            print('Evaluating...')
+            accuracy = evaluate_dihe(embedder, options, options.gpus > 1)
+            if accuracy <= best['accuracy']:
+                print(f'No improvement in epoch {e} ({best["accuracy"]:.4f} at epoch {best["epoch"]} >= {accuracy:.4f}')
+                if final:
+                    print('-> Saving despite this due to being on the final iteration')
+                    save_embedder_state(out, embedder, emb_opt, i, e, best, distributed=options.gpus > 1) # TODO: Also save GAN
+                else:
+                    print('-> Not saving the model!')
+            else:
+                print(f'Improvement! Previous best: {best["accuracy"]:.4f} at epoch: {best["epoch"]}; Now {accuracy:.4f} (epoch {e})')
+                stats = {'accuracy': accuracy, 'epoch': e}
+                print(f'Saving model at epoch {e}...')
+                save_embedder_state(out, embedder, emb_opt, i, e, stats, distributed=options.gpus > 1)
+                return stats
+
         print(f'Epoch {e} finished!')
         utils.print_time()
+        return best
 
-    assert options.load_gan is not None, 'DIHE training should have a pretrained GAN'
+    options.validate()
 
     torch.cuda.set_device(gpu)
 
@@ -363,13 +402,16 @@ def train_dihe(gpu, options): # TODO: Evaluation
     i = state[ITERATION_KEY] + 1 if load else 0
     if first:
         losses = LossMonitor()
+        best = state[BEST_STATS_KEY] if load else {'accuracy': 0.0, 'epoch': -1}
         print(f'Training for {options.epochs} epochs, starting now!')
+
+    if load: del state # everything's been loaded, make sure that this doesn't consume any extra memory
 
     for e in epoch_range:
         if options.gpus > 1:
             train_sampler.set_epoch(e)
 
-        for batch, gen_batch, hierarchies in train_loader:
+        for batch, gen_batch, hierarchies, _ in train_loader:
             block_size = len(batch) // 2
             if block_size == 0:
                 print(f'Got zero block size at iteration {i}, skipping!') #TODO: This might result in failures in a multi-gpu setting :think:
@@ -441,7 +483,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
 
             i += 1
         
-        if first: epoch_checkpoint()
+        if first:
+            best = epoch_checkpoint(e == end_epoch - 1)
         if options.gpus > 1: dist.barrier()
 
-    if first: checkpoint()
