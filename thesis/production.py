@@ -10,8 +10,7 @@ class Classifier:
         self.num_workers = num_workers
         self.device = device
 
-        self.encoder = encoder.to(device=self.device)
-        self.encoder.eval()
+        self.encoder = encoder
 
         self.embedding, self.annotations = self.build_index(sample_set)
     def build_index(self, sample_set):
