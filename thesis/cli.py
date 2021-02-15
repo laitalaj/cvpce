@@ -6,7 +6,6 @@ import shutil
 import click
 import torch
 import torch.multiprocessing as mp
-import torch.utils.tensorboard as tboard
 import pycocotools.cocoeval as cocoeval
 import torchvision.models as tmodels
 import torchvision.datasets as dsets
@@ -131,9 +130,11 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, 
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
     default=SKU110K_ANNOTATION_FILE
 )
-def visualize_discriminator_target(imgs, annotations):
+@click.option('--index', type=int)
+def visualize_discriminator_target(imgs, annotations, index):
     data = datautils.TargetDomainDataset(imgs, annotations)
-    img = random.choice(data)
+    print(f'Dataset size: {len(data)} -- Bbox index: {data.bbox_index[:3]} ... {data.bbox_index[-3:]}')
+    img = random.choice(data) if index is None else data[index]
     utils.show(img)
 
 @cli.command()
@@ -275,19 +276,6 @@ def visualize_gaussians(imgs, annotations, method):
     coco_to_retina = lambda bbox: torch.tensor([bbox[0], bbox[1], bbox[0]+bbox[2], bbox[1]+bbox[3]])
     gauss = datautils.generate_gaussians(w, h, [coco_to_retina(ann['bbox']) for ann in anns], **gauss_methods[method])
     utils.show(gauss)
-
-@cli.command()
-@click.option(
-    '--tensorboard-dir',
-    type=click.Path(file_okay=False, dir_okay=True, writable=True),
-    default=utils.rel_path('tboard')
-)
-def visualize_architecture(tensorboard_dir):
-    # tää ei toimi monimutkasilla arkkitehtuureilla, mut salee toimii paloilla
-    model = tmodels.resnet50()
-    writer = tboard.SummaryWriter(tensorboard_dir)
-    writer.add_graph(model, torch.randn(1, 3, 1200, 800))
-    writer.close()
 
 @cli.command()
 @click.option(

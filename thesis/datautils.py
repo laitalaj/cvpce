@@ -190,11 +190,22 @@ def resize_for_classification(img):
 class TargetDomainDataset(SKU110KDataset):
     def __init__(self, img_dir_path, annotation_file_path, skip=[]):
         super().__init__(img_dir_path, annotation_file_path, skip, include_gaussians=False, flip_chance=0)
+        self.bbox_index = self.build_bbox_index()
+    def build_bbox_index(self):
+        bbox_counts = torch.empty(len(self.index), dtype=torch.long)
+        for i, entry in enumerate(self.index):
+            bbox_counts[i] = len(entry['boxes'])
+        return bbox_counts.cumsum(0)
+    def __len__(self):
+        return self.bbox_index[-1].item()
     def __getitem__(self, i):
-        img, index_entry = super().__getitem__(i)
+        image_idx = torch.nonzero(self.bbox_index > i)[0, 0] # 0, 0 for the first nonzero (=true) index
+        bbox_idx = i - self.bbox_index[image_idx - 1] if image_idx > 0 else i
+
+        img, index_entry = super().__getitem__(image_idx) # this loads the whole image every time, could probably be more efficient
         _, img_h, img_w = img.shape
 
-        x1, y1, x2, y2 = index_entry['boxes'][torch.randint(len(index_entry['boxes']), (1,))][0] # TODO: Make this deterministic
+        x1, y1, x2, y2 = index_entry['boxes'][bbox_idx]
         w = min(img_w, x2) - max(0, x1)
         h = min(img_h, y2) - max(0, y1)
 
