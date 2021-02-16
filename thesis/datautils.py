@@ -224,15 +224,15 @@ def gp_annotated_collate_fn(samples):
     return torch.stack(emb_images), torch.stack(gen_images), categories, annotations
 
 class GroceryProductsDataset(tdata.Dataset):
-    def __init__(self, image_roots, skip=[['Background']],
+    def __init__(self, image_roots, skip=[['Background']], only=None,
         random_crop = True, min_cropped_size = 0.8,
         test_can_load = False, include_annotations = False):
         super().__init__()
-        self.paths, self.categories, self.annotations = self.build_index(image_roots, skip, test_can_load)
+        self.paths, self.categories, self.annotations = self.build_index(image_roots, skip, only, test_can_load)
         self.random_crop = random_crop
         self.min_cropped_size = min_cropped_size
         self.include_annotations = include_annotations
-    def build_index(self, image_roots, skip, test_can_load):
+    def build_index(self, image_roots, skip, only, test_can_load):
         print('Building index...')
         paths = []
         categories = []
@@ -246,6 +246,8 @@ class GroceryProductsDataset(tdata.Dataset):
                 current_path = to_search.pop()
                 current_hierarchy = hierarchies.pop()
                 if current_hierarchy in skip:
+                    continue
+                if only is not None and len(current_hierarchy) and current_hierarchy[0] not in only:
                     continue
                 for entry in os.scandir(current_path):
                     if entry.is_dir(follow_symlinks=False): # not following symlinks here to avoid possibily infinite looping

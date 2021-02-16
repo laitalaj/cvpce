@@ -9,6 +9,7 @@ from torchvision import utils as tvutils
 import matplotlib.pyplot as plt
 import matplotlib.collections as pltcollections
 import matplotlib.patches as patches
+import squarify
 
 from .models.classification import nearest_neighbors
 
@@ -115,6 +116,39 @@ def save_emb(out, anchors, emb_anchors, positives, emb_positives):
     build_emb_fig(anchors, emb_anchors, positives, emb_positives)
     plt.savefig(out)
     plt.close()
+
+def gp_distribution(dataset):
+    res = {}
+    leaf = {}
+    for _, _, hier in dataset:
+        for i in range(1, len(hier)+1):
+            part = hier[:i]
+            key = "/".join(part)
+            if key not in res:
+                res[key] = 0
+                leaf[key] = False
+            res[key] += 1
+        leaf["/".join(hier)] = True
+    return res, leaf
+
+def gp_test_distribution(dataset):
+    hierset = []
+    for _, anns, _ in dataset:
+        for a in anns:
+            hier = a.split("/")[:-1]
+            hierset.append((None, None, hier))
+    return gp_distribution(hierset)
+
+def plot_gp_distribution(dist, leaf):
+    sizes = []
+    labels = []
+    for k, v in leaf.items():
+        if v:
+            sizes.append(dist[k])
+            labels.append(k)
+    plt.figure(figsize=(8, 6))
+    squarify.plot(sizes=sizes, label=labels)
+    plt.show()
 
 def script_dir():
     return path.abspath(path.join(path.dirname(path.realpath(__file__)), '..'))

@@ -42,7 +42,7 @@ GP_TRAIN_FOLDERS = (
 )
 GP_TEST_DIR = utils.rel_path(*GP_ROOT, 'Testing')
 GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'annotations')
-GP_TEST_VALIDATION_SET = ['s1_14.csv', 's2_1.csv', 's3_92.csv', 's3_120.csv', 's3_271.csv', 's4_29.csv', 's5_37.csv']
+GP_TEST_VALIDATION_SET = ['s1_15.csv', 's2_3.csv', 's2_30.csv', 's2_143.csv', 's2_157.csv', 's3_111.csv', 's3_260.csv', 's5_55.csv']
 
 MODEL_DIR = ('..', 'models')
 PRETRAINED_GAN_FILE = utils.rel_path(*MODEL_DIR, 'pretrained_dihe_gan.tar')
@@ -175,6 +175,47 @@ def visualize_gp_test(imgs, annotations, store, image):
             return
         img, anns, boxes = dataset[idx]
     utils.show(img, groundtruth=tvops.box_convert(boxes, 'xyxy', 'xywh'), groundtruth_labels=anns)
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option('--only', type=str, multiple=True)
+def gp_distribution(img_dir, only):
+    if not len(only): only = None
+    data = datautils.GroceryProductsDataset(img_dir, only=only, random_crop=False)
+    dist, leaf = utils.gp_distribution(data)
+    for h, c in dist.items():
+        print(f'{h}: {c} ({leaf[h]})')
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none')
+def gp_test_distribution(imgs, annotations, only):
+    only_list = None
+    skip_list = None
+    if only == 'test':
+        skip_list = GP_TEST_VALIDATION_SET
+    elif only == 'val':
+        only_list = GP_TEST_VALIDATION_SET
+
+    data = datautils.GroceryProductsTestSet(imgs, annotations, only=only_list, skip=skip_list)
+    dist, leaf = utils.gp_test_distribution(data)
+    for h, c in dist.items():
+        print(f'{h}: {c} ({leaf[h]})')
+    utils.plot_gp_distribution(dist, leaf)
 
 @cli.command()
 @click.option(
