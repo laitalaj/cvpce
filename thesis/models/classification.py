@@ -37,7 +37,7 @@ class MACVGG(nn.Module): # TODO: calc convs_per_block based on the actual config
         x = self.block2(x)
         desc_2 = x.amax(dim=(-2, -1))
         desc = torch.cat((desc_1, desc_2), dim=1)
-        return desc / tla.norm(desc).clamp(min=eps)
+        return desc / tla.norm(desc, dim=1, keepdim=True).clamp(min=eps)
 
 def distance(emb1, emb2, dim = 1):
     return 1 - nnf.cosine_similarity(emb1, emb2, dim=dim)

@@ -627,6 +627,7 @@ def eval_dihe(img_dir, test_imgs, annotations, batch_size, dataloader_workers, e
     testset = datautils.GroceryProductsTestSet(test_imgs, annotations, only=only, skip=skip)
 
     encoder = classification.macvgg_embedder(pretrained=False).cuda()
+    encoder.eval()
     state = torch.load(enc_weights)
     encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
 
