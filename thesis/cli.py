@@ -589,6 +589,7 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
     multiple=True,
     default=GP_TRAIN_FOLDERS
 )
+@click.option('--only', type=str, multiple=True)
 @click.option(
     '--target-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
@@ -620,10 +621,10 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
 @click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
 @click.option('--load-enc', default=None)
 @click.option('--gpus', type=int, default=1)
-def train_dihe(source_dir, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
+def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
     options = classification_training.ClassificationTrainingOptions()
 
-    options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True)
+    options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, only=only if len(only) else None)
     options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
     options.evalset = datautils.GroceryProductsTestSet(eval_imgs, eval_annotations, only=GP_TEST_VALIDATION_SET)
 

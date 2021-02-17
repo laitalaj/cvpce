@@ -123,7 +123,7 @@ def loaders_and_test_images(gpu, options):
     # might take it into use later though
     disc_loader = DiscriminatorLoader(options)
 
-    test_images = torch.stack([options.dataset[img_index][0] for img_index in options.sample_indices])
+    test_images = torch.stack([options.dataset[img_index % len(options.dataset)][0] for img_index in options.sample_indices])
 
     return train_loader, disc_loader, train_sampler, test_images
 
@@ -250,7 +250,7 @@ def pretrain_gan(options):
     )
     disc_loader = DiscriminatorLoader(options)
 
-    test_image, _, _ = options.dataset[options.sample_indices[0]]
+    test_image, _, _ = options.dataset[options.sample_indices[0] % len(options.dataset)]
     target_image = options.discriminatorset[options.sample_indices[0] % len(options.discriminatorset)]
 
     i = 0
