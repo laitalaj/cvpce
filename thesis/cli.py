@@ -661,16 +661,17 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     default=GP_ANN_DIR
 )
+@click.option('--batch-norm/--no-batch-norm', default=True)
 @click.option('--batch-size', type=int, default=8)
 @click.option('--dataloader-workers', type=int, default=8)
 @click.option('--enc-weights', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=ENCODER_FILE)
 @click.option('--use-val-set/--no-use-val-set', default=False)
-def eval_dihe(img_dir, test_imgs, annotations, batch_size, dataloader_workers, enc_weights, use_val_set):
+def eval_dihe(img_dir, test_imgs, annotations, batch_norm, batch_size, dataloader_workers, enc_weights, use_val_set):
     sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
     only, skip = (GP_TEST_VALIDATION_SET, None) if use_val_set else (None, GP_TEST_VALIDATION_SET)
     testset = datautils.GroceryProductsTestSet(test_imgs, annotations, only=only, skip=skip)
 
-    encoder = classification.macvgg_embedder(pretrained=False).cuda()
+    encoder = classification.macvgg_embedder(model='vgg16_bn' if batch_norm else 'vgg16', pretrained=False).cuda()
     encoder.eval()
     state = torch.load(enc_weights)
     encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
