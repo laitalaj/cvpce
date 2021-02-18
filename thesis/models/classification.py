@@ -56,13 +56,15 @@ def nearest_neighbors(anchors, queries, k=1):
 
 def macvgg_embedder(model = 'vgg16_bn', pretrained = True, progress = True):
     model_to_config = {
-        'vgg16_bn': 'D'
+        'vgg16': ('D', False),
+        'vgg16_bn': ('D', True),
     }
     if model not in model_to_config:
         raise NotImplementedError(f'MACVGG not implemented for {model}')
 
     state_dict = tvutils.load_state_dict_from_url(vgg.model_urls[model], progress=progress) if pretrained else None
-    embedder = MACVGG(model_to_config[model], vgg_state_dict=state_dict)
+    config, batchnorm = model_to_config[model]
+    embedder = MACVGG(config, vgg_state_dict=state_dict, batch_norm=batchnorm)
 
     return embedder
 

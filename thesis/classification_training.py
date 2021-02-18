@@ -35,6 +35,8 @@ class ClassificationTrainingOptions:
     min_margin = 0.05 # Numbers from Tonioni's paper
     max_margin = 0.5
 
+    batchnorm = True
+
     batch_size = 4
     num_workers = 8
 
@@ -363,7 +365,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
 
     torch.cuda.set_device(gpu)
 
-    embedder = classification.macvgg_embedder().cuda()
+    embedder = classification.macvgg_embedder(model='vgg16_bn' if options.batchnorm else 'vgg16').cuda()
     generator = classification.unet_generator().cuda()
     discriminator = classification.patchgan_discriminator().cuda()
 

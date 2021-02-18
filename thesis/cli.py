@@ -615,13 +615,14 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
 )
+@click.option('--batch-norm/--no-batch-norm', default=True)
 @click.option('--batch-size', type=int, default=4)
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=10)
 @click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
 @click.option('--load-enc', default=None)
 @click.option('--gpus', type=int, default=1)
-def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
+def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_norm, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
     options = classification_training.ClassificationTrainingOptions()
 
     options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, only=only if len(only) else None)
@@ -631,6 +632,7 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
     options.load_gan = load_gan
     options.load_encoder = load_enc
     options.output_path = out_dir
+    options.batchnorm = batch_norm
     options.batch_size = batch_size
     options.num_workers = dataloader_workers
     options.epochs = epochs
