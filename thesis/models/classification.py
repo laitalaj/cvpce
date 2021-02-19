@@ -33,7 +33,6 @@ class MACVGG(nn.Module): # TODO: calc convs_per_block based on the actual config
         self.block1 = source_vgg.features[:cutoff_1]
         self.block2 = source_vgg.features[cutoff_1 : cutoff_2]
     def forward(self, x, eps = 1e-8):
-        x = ttf.normalize(x, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         x = self.block1(x)
         desc_1 = x.amax(dim=(-2, -1))
         x = self.block2(x)

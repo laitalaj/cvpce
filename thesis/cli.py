@@ -149,7 +149,7 @@ def visualize_gp(img_dir):
     img, gen_img, hier, ann = random.choice(data)
     print(' - '.join(hier))
     print(ann)
-    utils.show_multiple([img, utils.scale_from_tanh(gen_img)])
+    utils.show_multiple([utils.scale_from_tanh(img), utils.scale_from_tanh(gen_img)])
 
 @cli.command()
 @click.option(

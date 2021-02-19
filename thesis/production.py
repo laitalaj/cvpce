@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 
-from . import datautils
+from . import datautils, utils
 from .models.classification import nearest_neighbors
 
 class Classifier:
@@ -27,7 +27,7 @@ class Classifier:
     def classify(self, images):
         res = []
         for i in range(0, len(images), self.batch_size):
-            batch = images[i : i+self.batch_size].to(device=self.device)
+            batch = utils.scale_to_tanh(images[i : i+self.batch_size].to(device=self.device))
             emb = self.encoder(batch)
             nearest = nearest_neighbors(self.embedding, emb)
             res += [self.annotations[j] for j in nearest]

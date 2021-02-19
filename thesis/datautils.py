@@ -300,9 +300,9 @@ class GroceryProductsDataset(tdata.Dataset):
             gen_img = img
 
         if self.include_annotations:
-            return self.tensorize(img), self.tensorize(gen_img, True), self.categories[i], self.annotations[i]
+            return self.tensorize(img, True), self.tensorize(gen_img, True), self.categories[i], self.annotations[i]
         else:
-            return self.tensorize(img), self.tensorize(gen_img, True), self.categories[i]
+            return self.tensorize(img, True), self.tensorize(gen_img, True), self.categories[i]
 
 class GroceryProductsTestSet(tdata.Dataset):
     def __init__(self, image_dir, ann_dir, only=None, skip=None):

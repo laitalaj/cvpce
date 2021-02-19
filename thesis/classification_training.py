@@ -170,8 +170,8 @@ def save_gan_picture(out_path, name, model, img, target, distributed=False):
     if distributed: model = model.module # unwrap the actual model underlying DDP as suggested in https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
     model.eval()
     with torch.no_grad():
-        result = utils.scale_from_tanh(model(utils.scale_to_tanh(img[None].cuda()))[0])
-        utils.save_multiple([img, result.cpu(), target], path.join(out_path, f'{name}.png'))
+        result = utils.scale_from_tanh(model(img[None].cuda())[0])
+        utils.save_multiple([utils.scale_from_tanh(img), result.cpu(), target], path.join(out_path, f'{name}.png'))
     model.train()
 
 def save_dihe_picture(out_path, name, embedder, generator, imgs, distributed=False):
@@ -182,10 +182,10 @@ def save_dihe_picture(out_path, name, embedder, generator, imgs, distributed=Fal
     embedder.eval()
     generator.eval()
     with torch.no_grad():
-        fakes = generator(utils.scale_to_tanh(imgs))
-        emb_fakes = embedder(utils.scale_from_tanh(fakes))
+        fakes = generator(imgs)
+        emb_fakes = embedder(fakes)
         emb_reals = embedder(imgs)
-        utils.save_emb(path.join(out_path, f'{name}.png'), imgs, emb_reals, fakes, emb_fakes)
+        utils.save_emb(path.join(out_path, f'{name}.png'), utils.scale_from_tanh(imgs), emb_reals, utils.scale_from_tanh(fakes), emb_fakes)
     embedder.train()
     generator.train()
 
@@ -440,7 +440,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
             fake = generator(gen_batch)
             pred_fake = discriminator(fake)
             positive_emb = embedder(positives)
-            fake_emb = embedder(utils.scale_from_tanh(fake))
+            fake_emb = embedder(fake)
             loss_adv = nnf.binary_cross_entropy(pred_fake, torch.ones_like(pred_fake))
             loss_regularization = -zncc(fake, positives) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
             loss_emb = -distance(fake_emb, positive_emb).mean()
@@ -466,7 +466,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
             # encoder
             emb_opt.zero_grad()
             fake = generator(gen_batch)
-            anchor_emb = embedder(utils.scale_from_tanh(fake))
+            anchor_emb = embedder(fake)
             positive_emb = embedder(positives)
             negative_emb = embedder(negatives)
             loss = hierarchial_loss(anchor_emb, positive_emb, negative_emb, pos_hier, neg_hier, options.min_margin, options.max_margin)
