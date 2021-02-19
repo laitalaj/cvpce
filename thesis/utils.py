@@ -79,7 +79,7 @@ def build_emb_fig(anchors, emb_anchors, positives, emb_positives, figsize=(12, 1
         ax.add_patch(patch)
         ax.axis('off')
     
-    for pos, col, ax, nearest in zip(scale_from_tanh(recall_tensor(positives)), c_positives, positive_axes, nns):
+    for pos, col, ax, nearest in zip(recall_tensor(positives), c_positives, positive_axes, nns):
         ax.imshow(pos.transpose((1, 2, 0)))
         patch = patches.Rectangle((-.5, -.5), pos.shape[-1], pos.shape[-2], color=col, fill=False, lw=6)
         ax.add_patch(patch)
