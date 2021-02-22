@@ -666,7 +666,8 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
 @click.option('--dataloader-workers', type=int, default=8)
 @click.option('--enc-weights', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=ENCODER_FILE)
 @click.option('--use-val-set/--no-use-val-set', default=False)
-def eval_dihe(img_dir, test_imgs, annotations, batch_norm, batch_size, dataloader_workers, enc_weights, use_val_set):
+@click.option('--knn', default=1)
+def eval_dihe(img_dir, test_imgs, annotations, batch_norm, batch_size, dataloader_workers, enc_weights, use_val_set, knn):
     sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
     only, skip = (GP_TEST_VALIDATION_SET, None) if use_val_set else (None, GP_TEST_VALIDATION_SET)
     testset = datautils.GroceryProductsTestSet(test_imgs, annotations, only=only, skip=skip)
@@ -676,7 +677,7 @@ def eval_dihe(img_dir, test_imgs, annotations, batch_norm, batch_size, dataloade
     state = torch.load(enc_weights)
     encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
 
-    classification_eval.eval_dihe(encoder, sampleset, testset, batch_size, dataloader_workers)
+    classification_eval.eval_dihe(encoder, sampleset, testset, batch_size, dataloader_workers, k=knn)
 
 
 if __name__ == '__main__':

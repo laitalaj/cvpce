@@ -5,10 +5,11 @@ from . import datautils, utils
 from .models.classification import nearest_neighbors
 
 class Classifier:
-    def __init__(self, encoder, sample_set, device=torch.device('cuda'), batch_size=32, num_workers=8):
+    def __init__(self, encoder, sample_set, device=torch.device('cuda'), batch_size=32, num_workers=8, k=1):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.device = device
+        self.k = k
 
         self.encoder = encoder
 
@@ -29,6 +30,9 @@ class Classifier:
         for i in range(0, len(images), self.batch_size):
             batch = utils.scale_to_tanh(images[i : i+self.batch_size].to(device=self.device))
             emb = self.encoder(batch)
-            nearest = nearest_neighbors(self.embedding, emb)
-            res += [self.annotations[j] for j in nearest]
+            nearest = nearest_neighbors(self.embedding, emb, self.k)
+            if self.k == 1:
+                res += [self.annotations[j] for j in nearest]
+            else:
+                res += [[self.annotations[j] for j in n] for n in nearest]
         return res

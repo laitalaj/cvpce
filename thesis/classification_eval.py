@@ -3,7 +3,7 @@ from torchvision import ops as tvops
 
 from . import datautils, production
 
-def eval_dihe(encoder, sampleset, testset, batch_size, num_workers):
+def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1):
     print('Preparing classifier...')
     encoder.requires_grad_(False)
 
@@ -23,7 +23,8 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers):
 
         total += len(target_anns)
         for a1, a2 in zip(target_anns, pred_anns):
-            if a1 == a2: correct += 1
+            if k == 1 and a1 == a2: correct += 1
+            elif k > 1 and a1 in a2: correct += 1
 
     del classifier # maybe this will solve memory problems caused by eval?
 
