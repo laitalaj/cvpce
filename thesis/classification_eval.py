@@ -7,7 +7,7 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1):
     print('Preparing classifier...')
     encoder.requires_grad_(False)
 
-    classifier = production.Classifier(encoder, sampleset, batch_size=batch_size, num_workers=num_workers)
+    classifier = production.Classifier(encoder, sampleset, batch_size=batch_size, num_workers=num_workers, k=k)
 
     total = 0
     correct = 0
