@@ -435,20 +435,17 @@ def train_dihe(gpu, options): # TODO: Evaluation
             pos_hier = hierarchies[:block_size]
             neg_hier = hierarchies[block_size:block_size*2]
 
-            # generator
-            gen_opt.zero_grad()
+            # encoder
+            emb_opt.zero_grad()
             fake = generator(gen_batch)
-            pred_fake = discriminator(fake)
+            anchor_emb = embedder(fake)
             positive_emb = embedder(positives)
-            fake_emb = embedder(fake)
-            loss_adv = nnf.binary_cross_entropy(pred_fake, torch.ones_like(pred_fake))
-            loss_regularization = -zncc(fake, positives) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
-            loss_emb = -distance(fake_emb, positive_emb).mean()
-            loss_total = loss_adv + loss_regularization + 0.1 * loss_emb # weighting from Tonioni
-            loss_total.backward()
-            gen_opt.step()
+            negative_emb = embedder(negatives)
+            loss = hierarchial_loss(anchor_emb, positive_emb, negative_emb, pos_hier, neg_hier, options.min_margin, options.max_margin)
+            loss.backward()
+            emb_opt.step()
             if first:
-                losses.record_generator(loss_adv, loss_regularization, loss_emb)
+                losses.record_encoder(loss)
 
             # discriminator
             disc_opt.zero_grad()
@@ -463,17 +460,20 @@ def train_dihe(gpu, options): # TODO: Evaluation
             if first:
                 losses.record_discriminator(loss_real, loss_fake)
 
-            # encoder
-            emb_opt.zero_grad()
+            # generator
+            gen_opt.zero_grad()
             fake = generator(gen_batch)
-            anchor_emb = embedder(fake)
+            pred_fake = discriminator(fake)
             positive_emb = embedder(positives)
-            negative_emb = embedder(negatives)
-            loss = hierarchial_loss(anchor_emb, positive_emb, negative_emb, pos_hier, neg_hier, options.min_margin, options.max_margin)
-            loss.backward()
-            emb_opt.step()
+            fake_emb = embedder(fake)
+            loss_adv = nnf.binary_cross_entropy(pred_fake, torch.ones_like(pred_fake))
+            loss_regularization = -zncc(fake, gen_batch) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
+            loss_emb = -distance(fake_emb, positive_emb).mean()
+            loss_total = loss_adv + loss_regularization + 0.1 * loss_emb # weighting from Tonioni
+            loss_total.backward()
+            gen_opt.step()
             if first:
-                losses.record_encoder(loss)
+                losses.record_generator(loss_adv, loss_regularization, loss_emb)
 
             if first and i % 50 == 0:
                 print(f'batch:{i}\tE:{loss:.4f}\tD[real:{loss_real:.4f}\tfake:{loss_fake:.4f}]\tG[adv:{loss_adv:.4f}\treg:{loss_regularization:.4f}\temb:{loss_emb:.4f}]')
