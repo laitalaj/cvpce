@@ -661,21 +661,33 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     default=GP_ANN_DIR
 )
+@click.option('--model', type=click.Choice(('vgg16', 'resnet50')), default='vgg16')
+@click.option('--resnet-layers', type=int, multiple=True, default=[2, 3])
 @click.option('--batch-norm/--no-batch-norm', default=True)
 @click.option('--batch-size', type=int, default=8)
 @click.option('--dataloader-workers', type=int, default=8)
-@click.option('--enc-weights', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=ENCODER_FILE)
-@click.option('--use-val-set/--no-use-val-set', default=False)
+@click.option('--enc-weights')
+@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none')
 @click.option('--knn', default=1)
-def eval_dihe(img_dir, test_imgs, annotations, batch_norm, batch_size, dataloader_workers, enc_weights, use_val_set, knn):
+def eval_dihe(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm, batch_size, dataloader_workers, enc_weights, only, knn):
     sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
-    only, skip = (GP_TEST_VALIDATION_SET, None) if use_val_set else (None, GP_TEST_VALIDATION_SET)
-    testset = datautils.GroceryProductsTestSet(test_imgs, annotations, only=only, skip=skip)
 
-    encoder = classification.macvgg_embedder(model='vgg16_bn' if batch_norm else 'vgg16', pretrained=False).cuda()
+    only_list = None
+    skip_list = None
+    if only == 'test':
+        skip_list = GP_TEST_VALIDATION_SET
+    elif only == 'val':
+        only_list = GP_TEST_VALIDATION_SET
+    testset = datautils.GroceryProductsTestSet(test_imgs, annotations, only=only_list, skip=skip_list)
+
+    if model == 'vgg16':
+        encoder = classification.macvgg_embedder(model='vgg16_bn' if batch_norm else 'vgg16', pretrained=enc_weights is None).cuda()
+    elif model == 'resnet50':
+        encoder = classification.macresnet_encoder(pretrained=enc_weights is None, desc_layers=resnet_layers).cuda()
     encoder.eval()
-    state = torch.load(enc_weights)
-    encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
+    if enc_weights is not None:
+        state = torch.load(enc_weights)
+        encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
 
     classification_eval.eval_dihe(encoder, sampleset, testset, batch_size, dataloader_workers, k=knn)
 

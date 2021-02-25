@@ -18,7 +18,7 @@ class Classifier:
         loader = DataLoader(sample_set,
             batch_size=self.batch_size, num_workers=self.num_workers,
             collate_fn=datautils.gp_annotated_collate_fn, pin_memory=True)
-        embedding = torch.empty((0, 1024), dtype=torch.float, device=self.device)
+        embedding = torch.empty((0, self.encoder.embedding_size), dtype=torch.float, device=self.device)
         annotations = []
         for imgs, _, _, anns in loader:
             emb = self.encoder(imgs.to(device=self.device))
