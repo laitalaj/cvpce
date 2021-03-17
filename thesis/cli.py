@@ -36,10 +36,13 @@ SKU110K_SKIP = [
 
 
 GP_ROOT = (*DATA_DIR, 'Grocery_products')
+GP_TRAIN_FOLDERS = (GP_ROOT,)
+''' Ye olde folders, before I found Tonioni's fixed GP set
 GP_TRAIN_FOLDERS = (
     utils.rel_path(*GP_ROOT, 'Training'),
     utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'extra_products'),
 )
+'''
 GP_TEST_DIR = utils.rel_path(*GP_ROOT, 'Testing')
 GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'annotations')
 GP_TEST_VALIDATION_SET = ['s1_15.csv', 's2_3.csv', 's2_30.csv', 's2_143.csv', 's2_157.csv', 's3_111.csv', 's3_260.csv', 's5_55.csv']

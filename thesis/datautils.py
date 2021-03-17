@@ -226,9 +226,12 @@ def gp_annotated_collate_fn(samples):
 class GroceryProductsDataset(tdata.Dataset):
     def __init__(self, image_roots, skip=[['Background']], only=None,
         random_crop = True, min_cropped_size = 0.8,
-        test_can_load = False, include_annotations = False):
+        test_can_load = False, include_annotations = False, index_from_file = True):
         super().__init__()
-        self.paths, self.categories, self.annotations = self.build_index(image_roots, skip, only, test_can_load)
+        if index_from_file:
+            self.paths, self.categories, self.annotations = self.build_index_from_file(image_roots, skip, only)
+        else:
+            self.paths, self.categories, self.annotations = self.build_index(image_roots, skip, only, test_can_load)
         self.random_crop = random_crop
         self.min_cropped_size = min_cropped_size
         self.include_annotations = include_annotations
@@ -270,6 +273,29 @@ class GroceryProductsDataset(tdata.Dataset):
             print(f'Skipped a total of {len(skipped)} files due to not being image files openable with pillow')
             if len(skipped) < 10:
                 print(f'(Skipped: {skipped})')
+        return paths, categories, annotations
+    def build_index_from_file(self, dataset_roots, skip, only, index_filename = 'TrainingFiles.txt'):
+        print('Building index...')
+        paths = []
+        categories = []
+        annotations = []
+        for dataset_root in dataset_roots:
+            print(f'Processing {dataset_root}...')
+            index_file = path.join(dataset_root, index_filename)
+            with open(index_file, 'r') as f:
+                for l in f:
+                    parts = l.split('/')
+                    if len(parts) < 2: continue
+                    if only is not None and parts[0] not in only: continue
+
+                    hier = parts[1:-1] # Skip the first folder, it's always "Training", and the image name
+                    if hier in skip: continue
+
+                    paths.append(path.join(dataset_root, *parts))
+                    categories.append(hier)
+                    annotations.append('/'.join(parts[1:]))
+            print(f'-> Index size: {len(paths)}')
+        print(f'Index built!')
         return paths, categories, annotations
     def tensorize(self, img, tanh=False):
         new_size = (CLASSIFICATION_IMAGE_SIZE, round(CLASSIFICATION_IMAGE_SIZE * img.width / img.height)) if img.height > img.width \
