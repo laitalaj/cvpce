@@ -284,7 +284,7 @@ class GroceryProductsDataset(tdata.Dataset):
             index_file = path.join(dataset_root, index_filename)
             with open(index_file, 'r') as f:
                 for l in f:
-                    parts = l.split('/')
+                    parts = l.strip().split('/')
                     if len(parts) < 2: continue
                     if only is not None and parts[0] not in only: continue
 
