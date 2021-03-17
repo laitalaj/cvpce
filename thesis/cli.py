@@ -147,8 +147,9 @@ def visualize_discriminator_target(imgs, annotations, index):
     multiple=True,
     default=GP_TRAIN_FOLDERS
 )
-def visualize_gp(img_dir):
-    data = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+@click.option('--only', type=str, multiple=True)
+def visualize_gp(img_dir, only):
+    data = datautils.GroceryProductsDataset(img_dir, only=only, include_annotations=True)
     img, gen_img, hier, ann = random.choice(data)
     print(' - '.join(hier))
     print(ann)

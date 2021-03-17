@@ -286,9 +286,9 @@ class GroceryProductsDataset(tdata.Dataset):
                 for l in f:
                     parts = l.strip().split('/')
                     if len(parts) < 2: continue
-                    if only is not None and parts[0] not in only: continue
 
                     hier = parts[1:-1] # Skip the first folder, it's always "Training", and the image name
+                    if only is not None and hier[0] not in only: continue
                     if hier in skip: continue
 
                     paths.append(path.join(dataset_root, *parts))
