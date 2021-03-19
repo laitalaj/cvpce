@@ -224,7 +224,7 @@ def gp_annotated_collate_fn(samples):
     return torch.stack(emb_images), torch.stack(gen_images), categories, annotations
 
 class GroceryProductsDataset(tdata.Dataset):
-    def __init__(self, image_roots, skip=[r'^Background.*$', r'^.*/originals?$'], only=None,
+    def __init__(self, image_roots, skip=[r'^Background.*$', r'^.*/[Oo]riginals?$'], only=None,
         random_crop = True, min_cropped_size = 0.8,
         test_can_load = False, include_annotations = False, index_from_file = False):
         super().__init__()
