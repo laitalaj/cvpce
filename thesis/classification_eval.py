@@ -3,7 +3,7 @@ from torchvision import ops as tvops
 
 from . import datautils, production
 
-def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1):
+def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_missed = True):
     print('Preparing classifier...')
     encoder.requires_grad_(False)
 
@@ -11,6 +11,7 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1):
 
     total = 0
     correct = 0
+    missed = {}
 
     print('Eval start!')
     for i, (img, target_anns, boxes) in enumerate(testset):
@@ -25,10 +26,17 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1):
         for a1, a2 in zip(target_anns, pred_anns):
             if k == 1 and a1 == a2: correct += 1
             elif k > 1 and a1 in a2: correct += 1
+            else:
+                if a1 not in missed:
+                    missed[a1] = 0
+                missed[a1] += 1
 
     del classifier # maybe this will solve memory problems caused by eval?
 
     encoder.requires_grad_(True)
 
     print(f'Total annotations: {total}, Correctly guessed: {correct}, Accuracy: {correct / total:.4f}')
+    if report_missed:
+        most_missed = sorted((v, k) for k, v in missed.items())[:5]
+        print(f'Most missed: {", ".join(f"{a} ({n})" for n, a in most_missed)}')
     return correct / total
