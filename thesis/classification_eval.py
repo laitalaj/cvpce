@@ -25,7 +25,10 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
 
         total += len(target_anns)
         for a1, a2 in zip(target_anns, pred_anns):
+            if a1 not in total_per_ann:
+                total_per_ann[a1] = 0
             total_per_ann[a1] += 1
+
             if k == 1 and a1 == a2: correct += 1
             elif k > 1 and a1 in a2: correct += 1
             else:
