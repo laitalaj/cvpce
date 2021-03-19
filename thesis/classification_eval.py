@@ -42,6 +42,6 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
 
     print(f'Total annotations: {total}, Correctly guessed: {correct}, Accuracy: {correct / total:.4f}')
     if report_missed:
-        most_missed = sorted(((v / total_per_ann[k], k) for k, v in missed.items()), reverse=True)[:5]
-        print(f'Most missed: {", ".join(f"{a} ({n * 100} %)" for n, a in most_missed)}')
+        most_missed = sorted(((v / total_per_ann[k], v, k) for k, v in missed.items()), reverse=True)[:10]
+        print(f'Most missed: {", ".join(f"{a} ({n}, {p * 100} %)" for p, n, a in most_missed)}')
     return correct / total
