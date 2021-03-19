@@ -149,7 +149,7 @@ def visualize_discriminator_target(imgs, annotations, index):
 )
 @click.option('--only', type=str, multiple=True)
 def visualize_gp(img_dir, only):
-    data = datautils.GroceryProductsDataset(img_dir, only=only, include_annotations=True)
+    data = datautils.GroceryProductsDataset(img_dir, only=only if len(only) else None, include_annotations=True)
     img, gen_img, hier, ann = random.choice(data)
     print(' - '.join(hier))
     print(ann)

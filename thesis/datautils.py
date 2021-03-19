@@ -224,10 +224,12 @@ def gp_annotated_collate_fn(samples):
     return torch.stack(emb_images), torch.stack(gen_images), categories, annotations
 
 class GroceryProductsDataset(tdata.Dataset):
-    def __init__(self, image_roots, skip=[['Background']], only=None,
+    def __init__(self, image_roots, skip=[r'^Background.*$', r'^.*/originals?$'], only=None,
         random_crop = True, min_cropped_size = 0.8,
-        test_can_load = False, include_annotations = False, index_from_file = True):
+        test_can_load = False, include_annotations = False, index_from_file = False):
         super().__init__()
+
+        skip = re.compile('|'.join(f'({s})' for s in skip))
         if index_from_file:
             self.paths, self.categories, self.annotations = self.build_index_from_file(image_roots, skip, only)
         else:
@@ -248,7 +250,7 @@ class GroceryProductsDataset(tdata.Dataset):
             while len(to_search):
                 current_path = to_search.pop()
                 current_hierarchy = hierarchies.pop()
-                if current_hierarchy in skip:
+                if skip.match('/'.join(current_hierarchy)) is not None:
                     continue
                 if only is not None and len(current_hierarchy) and current_hierarchy[0] not in only:
                     continue
@@ -257,7 +259,7 @@ class GroceryProductsDataset(tdata.Dataset):
                         to_search.append(entry.path)
                         hierarchies.append(current_hierarchy + [entry.name])
                     elif entry.is_file():
-                        if entry.name in ('.DS_Store', 'index.txt', 'TrainingClassesIndex.mat'): continue
+                        if entry.name in ('.DS_Store', 'index.txt', 'TrainingClassesIndex.mat', 'classes.csv'): continue
                         if test_can_load:
                             try:
                                 pil.Image.open(entry.path)
@@ -289,7 +291,7 @@ class GroceryProductsDataset(tdata.Dataset):
 
                     hier = parts[1:-1] # Skip the first folder, it's always "Training", and the image name
                     if only is not None and hier[0] not in only: continue
-                    if hier in skip: continue
+                    if skip.match('/'.join(hier)) is not None: continue
 
                     paths.append(path.join(dataset_root, *parts))
                     categories.append(hier)
