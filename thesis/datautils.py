@@ -259,7 +259,7 @@ class GroceryProductsDataset(tdata.Dataset):
                         to_search.append(entry.path)
                         hierarchies.append(current_hierarchy + [entry.name])
                     elif entry.is_file():
-                        if entry.name in ('.DS_Store', 'index.txt', 'TrainingClassesIndex.mat', 'classes.csv'): continue
+                        if entry.name in ('.DS_Store', 'index.txt', 'TrainingClassesIndex.mat', 'classes.csv', 'Thumbs.db'): continue
                         if test_can_load:
                             try:
                                 pil.Image.open(entry.path)
