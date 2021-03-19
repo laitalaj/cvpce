@@ -340,8 +340,8 @@ def train_dihe(gpu, options): # TODO: Evaluation
             gan_out = path.join(options.output_path, f'epoch_{e}_gan.tar')
             print('Evaluating...')
             accuracy = evaluate_dihe(embedder, options, distributed)
-            if accuracy <= best['accuracy']:
-                print(f'No improvement in epoch {e} ({best["accuracy"]:.4f} at epoch {best["epoch"]} >= {accuracy:.4f}')
+            if accuracy < best['accuracy']:
+                print(f'No improvement in epoch {e} ({best["accuracy"]:.4f} at epoch {best["epoch"]} > {accuracy:.4f}')
                 if final:
                     print('-> Saving despite this due to being on the final iteration')
                     save_embedder_state(out, embedder, emb_opt, i, e, best, distributed=distributed)
