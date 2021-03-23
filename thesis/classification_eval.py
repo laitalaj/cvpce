@@ -50,6 +50,6 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
         most_missed = sorted(((v / total_per_ann[k], v, k) for k, v in missed.items()), reverse=True)[:10]
         print(f'Most missed: {", ".join(f"{a} ({n}, {p * 100} %)" for p, n, a in most_missed)}')
         for _, n, k in most_missed[:3]:
-            common_misclassifications = sorted(((v / n, v, k) for k, v in most_missed[k].items()), reverse=True)[:3]
+            common_misclassifications = sorted(((v / n, v, k) for k, v in misclassification[k].items()), reverse=True)[:3]
             print(f'{k}: Commonly mistaken for {", ".join(f"{a} ({n}, {p * 100} %)" for p, n, a in common_misclassifications)}')
     return correct / total
