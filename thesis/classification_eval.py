@@ -12,6 +12,7 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
     total = 0
     correct = 0
     missed = {}
+    misclassification = {}
     total_per_ann = {}
 
     print('Eval start!')
@@ -34,7 +35,11 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
             else:
                 if a1 not in missed:
                     missed[a1] = 0
+                    misclassification[a1] = {}
+                if a2 not in misclassification[a1]:
+                    misclassification[a1][a2] = 0
                 missed[a1] += 1
+                misclassification[a1][a2] += 1
 
     del classifier # maybe this will solve memory problems caused by eval?
 
@@ -44,4 +49,7 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
     if report_missed:
         most_missed = sorted(((v / total_per_ann[k], v, k) for k, v in missed.items()), reverse=True)[:10]
         print(f'Most missed: {", ".join(f"{a} ({n}, {p * 100} %)" for p, n, a in most_missed)}')
+        for _, n, k in most_missed[:3]:
+            common_misclassifications = sorted(((v / n, v, k) for k, v in most_missed[k].items()), reverse=True)[:3]
+            print(f'{k}: Commonly mistaken for {", ".join(f"{a} ({n}, {p * 100} %)" for p, n, a in common_misclassifications)}')
     return correct / total
