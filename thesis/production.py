@@ -1,8 +1,20 @@
 import torch
 from torch.utils.data import DataLoader
 
-from . import datautils, utils
+from . import datautils, planograms, utils
 from .models.classification import nearest_neighbors
+
+class ProposalGenerator:
+    def __init__(self, detector, device = torch.device('cuda'), confidence_threshold = 0.5):
+        self.detector = detector
+        self.device = device
+        self.condfidence_threshold = confidence_threshold
+    def generate_proposals(self, image):
+        res = self.detector(image[None].to(self.device))[0]
+        return res['boxes'][res['scores'] > self.condfidence_threshold]
+    def generate_proposals_and_images(self, image):
+        boxes = self.generate_proposals(image)
+        return boxes, torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in boxes])
 
 class Classifier:
     def __init__(self, encoder, sample_set, device=torch.device('cuda'), batch_size=32, num_workers=8, k=1):
@@ -36,3 +48,31 @@ class Classifier:
             else:
                 res += [[self.annotations[j] for j in n] for n in nearest]
         return res
+
+class PlanogramComparator:
+    def __init__(self, graph_threshold = 0.5):
+        self.graph_threshold = graph_threshold
+    def compare(self, expected, actual, image, classifier):
+        ge = planograms.build_graph(expected['boxes'], expected['labels'], self.graph_threshold)
+        ga = planograms.build_graph(actual['boxes'], actual['labels'], self.graph_threshold)
+        matching = planograms.large_common_subgraph(ge, ga) # TODO: Possibility to use Tonioni
+        found, missing_indices, missing_positions, missing_labels = planograms.finalize_via_ransac(
+            matching, expected['boxes'], actual['boxes'], expected['labels'], actual['labels']
+        )
+        missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions])
+        reclass_labels = classifier.classify(missing_imgs)
+        for idx, expected_label, actual_label in zip(missing_indices, missing_labels, reclass_labels):
+            if expected_label == actual_label:
+                found[idx] = True
+        return found.sum() / len(found) # TODO: Also return which were actually missing
+
+class PlanogramEvaluator:
+    def __init__(self, proposal_generator, classifier, planogram_comparator):
+        self.proposal_generator = proposal_generator
+        self.classifier = classifier
+        self.planogram_comparator = planogram_comparator
+    def evaluate(self, image, planogram):
+        boxes, images = self.proposal_generator.generate_proposals_and_images(image)
+        classes = self.classifier.classify(images)
+        compliance = self.planogram_comparator.compare(planogram, {'boxes': boxes, 'labels': classes}, image, self.classifier)
+        return compliance
