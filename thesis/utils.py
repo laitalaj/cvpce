@@ -16,7 +16,10 @@ from .models.classification import nearest_neighbors
 def recall_tensor(tensor):
     return tensor.detach().cpu().numpy()
 
-def plot_boxes(boxes, color='blue', hl_color = None, hl_width = 5):
+def plot_boxes(boxes, color='blue', hl_color = None, hl_width = 5, ax = None):
+    if ax is None:
+        ax = plt.gca()
+
     hl_offset = (hl_width - 1) // 2
     highlights = [patches.Rectangle((x, y), w, h) for x, y, w, h in boxes]
     boxes = [patches.Rectangle((x, y), w, h) for x, y, w, h in boxes]
@@ -25,26 +28,31 @@ def plot_boxes(boxes, color='blue', hl_color = None, hl_width = 5):
     highlightcollection = pltcollections.PatchCollection(highlights, facecolor='none', edgecolor=hl_color, linewidth=hl_width)
     boxcollection = pltcollections.PatchCollection(boxes, facecolor='none', edgecolor=color)
 
-    plt.gca().add_collection(highlightcollection)
-    plt.gca().add_collection(boxcollection)
+    ax.add_collection(highlightcollection)
+    ax.add_collection(boxcollection)
 
-def plot_labels(labels, boxes, color='blue'):
+def plot_labels(labels, boxes, color='blue', ax = None):
+    if ax is None:
+        ax = plt.gca()
+
     for l, b in zip(labels, boxes):
         x, y, _, _ = b
-        plt.text(x + 12, y + 12, l, color=color, va='top', ha='left', fontweight='bold')
+        ax.text(x + 12, y + 12, l, color=color, va='top', ha='left', fontweight='bold')
 
-def build_fig(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = [], figsize=(12, 12)):
-    plt.figure(figsize=figsize)
-    plt.axis('off')
+def build_fig(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = [], figsize=(12, 12), ax = None):
+    if ax is None:
+        plt.figure(figsize=figsize)
+        ax = plt.gca()
+    ax.set_axis_off()
 
     if len(img.shape) == 2:
         img = img[None]
-    plt.imshow(img.numpy().transpose((1, 2, 0)), interpolation='nearest')
+    ax.imshow(img.numpy().transpose((1, 2, 0)), interpolation='nearest')
 
-    plot_boxes(groundtruth, 'green')
-    plot_labels(groundtruth_labels, groundtruth, 'green')
-    plot_boxes(detections, 'red')
-    plot_labels(detection_labels, detections, 'red')
+    plot_boxes(groundtruth, 'green', ax=ax)
+    plot_labels(groundtruth_labels, groundtruth, 'green', ax=ax)
+    plot_boxes(detections, 'red', ax=ax)
+    plot_labels(detection_labels, detections, 'red', ax=ax)
 
 def build_emb_fig(anchors, emb_anchors, positives, emb_positives, figsize=(12, 12)):
     assert len(anchors) <= 10 and len(positives) <= 10, 'Max. 10 supported atm'
@@ -117,6 +125,27 @@ def save_emb(out, anchors, emb_anchors, positives, emb_positives):
     plt.savefig(out)
     plt.close()
 
+def draw_planogram(boxes, labels, ax = None, xlim = None, ylim = None):
+    if ax is None:
+        plt.figure(figsize=(12, 9))
+        ax = plt.gca()
+
+    if xlim is None:
+        xlim = (boxes[:,0].amin(), boxes[:,2].amax())
+    if ylim is None:
+        ylim = (boxes[:,1].amin(), boxes[:,3].amax())
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    ax.set_aspect('equal')
+
+    box_patches = [patches.Rectangle((x1, y1), x2 - x1, y2 - y1) for x1, y1, x2, y2 in boxes]
+    box_collection = pltcollections.PatchCollection(box_patches, facecolor='none', edgecolor='black')
+    ax.add_collection(box_collection)
+    for label, (x1, y1, x2, y2) in zip(labels, boxes):
+        x = (x1 + x2) / 2
+        y = (y1 + y2) / 2
+        ax.text(x, y, label, ha='center', va='center')
+
 def gp_distribution(dataset):
     res = {}
     leaf = {}
@@ -176,6 +205,16 @@ def scale_from_tanh(tensor):
 def pca(tensors, keepdims = 2):
     u, s, _ = torch.svd(tensors)
     return torch.stack([u[:, i] * s[i] for i in range(keepdims)], dim=1)
+
+def labels_to_tensors(l1, *ln):
+    key = list(set(l1).union(*ln))
+    conversion = {l: i for i, l in enumerate(key)}
+    res = (torch.tensor([conversion[l] for l in lbl], dtype=torch.long) for lbl in [l1, *ln])
+    return (*res, key)
+
+def tensors_to_labels(key, *ln):
+    res = tuple([key[i] for i in lbl] for lbl in ln)
+    return res
 
 def print_time():
     print(f'-- {time.asctime(time.localtime())} --')

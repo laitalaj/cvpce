@@ -5,6 +5,8 @@ from torchvision import ops as tvops
 import networkx as nx
 from cv2 import findHomography, RANSAC
 
+from . import utils
+
 CARDINALS = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'] # TODO: Could use integers instead of strings for this to gain some speed
 
 def _check_dir(i, j, dir, matrices, graph, dist):
@@ -66,7 +68,7 @@ def build_graph(boxes, labels, thresh_size=0.5):
                     not_found.remove(dir)
                     break
 
-    return g, centres
+    return g
 
 def _build_hypothesis(g1, g2, n1, n2, edge_label):
     neigh1 = {}
@@ -102,7 +104,7 @@ def _get_next(g1, g2, n1, n2, edge_label):
                 nxt.append((e1, e2))
     return nxt
 
-def large_common_subgraph(g1, g2, edge_label = 'dir', min_score = -0.2, stop_at_fraction = 1/3):
+def large_common_subgraph(g1, g2, edge_label = 'dir', min_score = -0.2, stop_at_fraction = 1/2):
     hypotheses = build_hypotheses(g1, g2, edge_label)
 
     best = set()
@@ -176,22 +178,26 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
     boxes2 = b2[nodes2]
     points1 = torch.cat((boxes1[:, :2], boxes1[:, 2:]))
     points2 = torch.cat((boxes2[:, :2], boxes2[:, 2:]))
-    homography, _ = findHomography(points1, points2, method=RANSAC, ransacReprojThreshold=reproj_threshold)
+    homography, _ = findHomography(points1.numpy(), points2.numpy(), RANSAC, reproj_threshold)
+    homography = torch.tensor(homography, dtype=torch.float)
 
     expected_positions = torch.stack(
         [torch.cat((_project(homography, x1, y1), _project(homography, x2, y2))) for x1, y1, x2, y2 in b1]
     )
 
-    labels = set(l1) & set(l2)
-    matched_expected = torch.full(len(expected_positions), False)
+    l1, l2, key = utils.labels_to_tensors(l1, l2)
+    matched_expected = torch.full((len(expected_positions),), False)
 
-    for lbl in labels: # Find expected w/ matching detections
+    for lbl in range(len(key)): # Find expected w/ matching detections
         expected_indices = l1 == lbl
         reverse_expected = torch.where(expected_indices)[0]
-        b2_indices = b2 == lbl
-        matched_b2 = torch.full(b2_indices.sum(), False)
+        if len(reverse_expected) == 0: continue
 
-        lbl_ious = tvops.box_iou(expected_positions[expected_indices], b2[b2_indices])
+        b2_indices = l2 == lbl
+        matched_b2 = torch.full((b2_indices.sum(),), False)
+        if len(matched_b2) == 0: continue
+
+        lbl_ious = tvops.box_iou(expected_positions[expected_indices, :], b2[b2_indices, :])
         sorted_iou, sort_idx = torch.sort(lbl_ious, dim=1, descending=True)
         for i, (ious, idxs) in enumerate(zip(sorted_iou, sort_idx)):
             for iou, idx in zip(ious, idxs):
@@ -202,5 +208,5 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
 
     missing_expected = torch.where(matched_expected == False)[0]
     missing_positions = expected_positions[missing_expected]
-    missing_labels = l1[missing_expected]
+    missing_labels = utils.tensors_to_labels(key, l1[missing_expected])
     return matched_expected, missing_expected, missing_positions, missing_labels

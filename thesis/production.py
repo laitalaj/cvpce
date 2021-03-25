@@ -52,18 +52,20 @@ class Classifier:
 class PlanogramComparator:
     def __init__(self, graph_threshold = 0.5):
         self.graph_threshold = graph_threshold
-    def compare(self, expected, actual, image, classifier):
-        ge = planograms.build_graph(expected['boxes'], expected['labels'], self.graph_threshold)
+    def compare(self, expected, actual, image=None, classifier=None):
+        ge = expected['graph'] if 'graph' in expected else planograms.build_graph(expected['boxes'], expected['labels'], self.graph_threshold)
         ga = planograms.build_graph(actual['boxes'], actual['labels'], self.graph_threshold)
         matching = planograms.large_common_subgraph(ge, ga) # TODO: Possibility to use Tonioni
         found, missing_indices, missing_positions, missing_labels = planograms.finalize_via_ransac(
             matching, expected['boxes'], actual['boxes'], expected['labels'], actual['labels']
         )
-        missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions])
-        reclass_labels = classifier.classify(missing_imgs)
-        for idx, expected_label, actual_label in zip(missing_indices, missing_labels, reclass_labels):
-            if expected_label == actual_label:
-                found[idx] = True
+
+        if classifier is not None and image is not None:
+            missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions])
+            reclass_labels = classifier.classify(missing_imgs)
+            for idx, expected_label, actual_label in zip(missing_indices, missing_labels, reclass_labels):
+                if expected_label == actual_label:
+                    found[idx] = True
         return found.sum() / len(found) # TODO: Also return which were actually missing
 
 class PlanogramEvaluator:

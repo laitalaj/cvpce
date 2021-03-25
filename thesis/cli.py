@@ -12,6 +12,8 @@ import torchvision.datasets as dsets
 import torchvision.ops as tvops
 import torchvision.transforms as tforms
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+import networkx as nx
 
 from . import datautils
 from . import utils
@@ -45,7 +47,9 @@ GP_TRAIN_FOLDERS = (
 '''
 GP_TEST_DIR = utils.rel_path(*GP_ROOT, 'Testing')
 GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'annotations')
+GP_PLANO_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'planograms')
 GP_TEST_VALIDATION_SET = ['s1_15.csv', 's2_3.csv', 's2_30.csv', 's2_143.csv', 's2_157.csv', 's3_111.csv', 's3_260.csv', 's5_55.csv']
+GP_PLANO_VALIDATION_SET = [f'{s.split(".")[0]}.json' for s in GP_TEST_VALIDATION_SET]
 
 MODEL_DIR = ('..', 'models')
 PRETRAINED_GAN_FILE = utils.rel_path(*MODEL_DIR, 'pretrained_dihe_gan.tar')
@@ -273,6 +277,36 @@ def fix_gp(source_dir, out_dir, dry_run):
                 shutil.copy(f.path, os.path.join(out_path, new))
     print('Done!')
 
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option(
+    '--planograms',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_PLANO_DIR
+)
+def planogram_test(imgs, annotations, planograms):
+    data = datautils.PlanogramTestSet(imgs, annotations, planograms, only=GP_TEST_VALIDATION_SET)
+    img, anns, boxes, plano = random.choice(data)
+    _, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 8))
+    utils.draw_planogram(plano['boxes'], plano['labels'], ax=ax1)
+    centres = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in plano['boxes']])
+    nx.draw(plano['graph'], pos={i: (x.item(), y.item()) for i, (x, y) in enumerate(centres)}, ax=ax2, with_labels=True)
+    #utils.build_fig(img, groundtruth=boxes, groundtruth_labels=anns, ax=ax3)
+    utils.build_fig(img, ax=ax3) # TODO: Jostain syystä ei toimi groundtruthien piirto täs .__.
+    plt.show()
+
+    comparator = production.PlanogramComparator()
+    res = comparator.compare(plano, {'boxes': boxes, 'labels': anns})
+    print(res)
 
 @cli.command()
 @click.option(

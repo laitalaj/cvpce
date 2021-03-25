@@ -9,7 +9,7 @@ from torch import distributions as tdist
 from torchvision.transforms import functional as ttf
 from torchvision import utils as tvutils
 
-from . import utils
+from . import planogram_adapters, utils
 
 ## PROPOSALS ##
 
@@ -367,6 +367,7 @@ class GroceryProductsTestSet(tdata.Dataset):
                     boxes.append([int(coord) for coord in (x1, y1, x2, y2)])
 
             index.append({
+                'id': (match.group(1), match.group(2)),
                 'path': self.get_image_path(match.group(1), match.group(2)),
                 'anns': anns,
                 'boxes': torch.tensor(boxes),
@@ -385,3 +386,21 @@ class GroceryProductsTestSet(tdata.Dataset):
         index_entry = self.index[i]
         img = pil.Image.open(index_entry['path'])
         return ttf.to_tensor(img), index_entry['anns'], index_entry['boxes']
+
+class PlanogramTestSet(GroceryProductsTestSet):
+    def __init__(self, image_dir, ann_dir, plano_dir, only=None, skip=None):
+        self.plano_dir = plano_dir
+        super().__init__(image_dir, ann_dir, only, skip)
+    def build_index(self, ann_dir, only, skip):
+        index = super().build_index(ann_dir, only, skip)
+        for entry in index:
+            s, i = entry['id']
+            plano_path = path.join(self.plano_dir, f's{s}_{i}.json')
+            boxes, labels, g = planogram_adapters.read_tonioni_planogram(plano_path)
+            entry['plano'] = {
+                'boxes': boxes, 'labels': labels, 'graph': g,
+            } 
+        return index
+    def __getitem__(self, i):
+        img, anns, boxes = super().__getitem__(i)
+        return img, anns, boxes, self.index[i]['plano']
