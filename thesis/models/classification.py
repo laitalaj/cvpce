@@ -5,7 +5,7 @@ from torchvision.models import utils as tvutils
 from torchvision.models import vgg, resnet
 from torchvision.transforms import functional as ttf
 
-from .pix2pix.models import networks as p2pn # TODO: this doesn't work, maybe fork it and fix the models init?
+from .pix2pix.models import networks as p2pn
 
 class AveragingPatchGAN(nn.Module):
     def __init__(self, channels = 3, initial_filters = 64, typ = 'basic'):
@@ -123,8 +123,8 @@ def macresnet_encoder(model = 'resnet50', pretrained = True, progress = True, ba
     source_resnet = resnet._resnet(model, block, layers, pretrained, progress, norm_layer = norm_layer)
     return MACResNet(source_resnet, desc_layers)
 
-def unet_generator():
-    return p2pn.define_G(3, 3, 64, 'unet_256')
+def unet_generator(masked = False):
+    return p2pn.define_G(4 if masked else 3, 3, 64, 'unet_256')
 
 def patchgan_discriminator():
     return AveragingPatchGAN()

@@ -36,6 +36,7 @@ class ClassificationTrainingOptions:
     max_margin = 0.5
 
     batchnorm = True
+    masks = False
 
     batch_size = 4
     num_workers = 8
@@ -140,7 +141,23 @@ def zncc(images, templates):
         for c_idx, (i_chan, t_chan) in enumerate(zip(img, tmpl)):
             result = (i_chan - imean[i_idx][c_idx]) * (t_chan - tmean[i_idx][c_idx])
             result = result.sum() / (istd[i_idx][c_idx] * tstd[i_idx][c_idx])
-            total += result
+            total = total + result
+    return total / (reduce(lambda acc, val: acc * val, images.shape))
+
+def masked_zncc(images, templates_with_masks):
+    assert len(images.shape) == 4, 'Expecting images with shape (idx, channels, height, width)'
+
+    total = 0
+    for img, tmpl in zip(images, templates_with_masks):
+        mask = tmpl[3] == 0
+        for i_chan, t_chan in zip(img, tmpl):
+            masked_ichan = i_chan[mask]
+            masked_tchan = t_chan[mask]
+            istd, imean = torch.std_mean(masked_ichan)
+            tstd, tmean = torch.std_mean(masked_tchan)
+            result = (masked_ichan - imean) * (masked_tchan - tmean)
+            result = result.sum() / (istd * tstd)
+            total = total + result
     return total / (reduce(lambda acc, val: acc * val, images.shape))
 
 def hierarchy_similarity(positives, negatives):
@@ -239,7 +256,7 @@ def pretrain_gan(options):
 
     options.validate(pretraining = True)
 
-    generator = classification.unet_generator().cuda() # Learning rates from the DIHE paper
+    generator = classification.unet_generator(options.masks).cuda() # Learning rates from the DIHE paper
     discriminator = classification.patchgan_discriminator().cuda()
 
     gen_opt = topt.Adam(generator.parameters(), 1e-5)
@@ -254,6 +271,8 @@ def pretrain_gan(options):
 
     test_image, _, _ = options.dataset[options.sample_indices[0] % len(options.dataset)]
     target_image = options.discriminatorset[options.sample_indices[0] % len(options.discriminatorset)]
+
+    regularization = masked_zncc if options.masks else zncc
 
     i = 0
     for e in range(options.epochs):
@@ -277,7 +296,7 @@ def pretrain_gan(options):
             gen_opt.zero_grad()
             pred_fake = discriminator(fake)
             loss_adv = nnf.binary_cross_entropy(pred_fake, torch.ones_like(pred_fake))
-            loss_regularization = -zncc(fake, gen_batch) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
+            loss_regularization = -regularization(fake, gen_batch) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
             loss_total = loss_adv + loss_regularization
             loss_total.backward()
             gen_opt.step()

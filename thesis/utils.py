@@ -6,10 +6,13 @@ import time
 import numpy as np
 import torch
 from torchvision import utils as tvutils
+from torchvision.transforms import functional as ttf
 import matplotlib.pyplot as plt
 import matplotlib.collections as pltcollections
 import matplotlib.patches as patches
 import squarify
+from skimage.segmentation import flood
+from skimage.filters import sobel
 
 from .models.classification import nearest_neighbors
 
@@ -215,6 +218,19 @@ def labels_to_tensors(l1, *ln):
 def tensors_to_labels(key, *ln):
     res = tuple([key[i] for i in lbl] for lbl in ln)
     return res
+
+def build_mask(img, tolerance=1e-2):
+    _, h, w = img.shape
+    corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+    gray_image = ttf.rgb_to_grayscale(img).numpy()
+    white_corners = [(x, y) for x, y in corners if gray_image[0, y, x] >= 1 - tolerance]
+    sobel_image = sobel(gray_image)[0]
+    mask = np.full((h, w), False)
+    for x, y in white_corners:
+        if mask[y, x]: continue
+        cfill = flood(sobel_image, (y, x), tolerance=tolerance)
+        mask = mask | cfill
+    return torch.tensor(mask)
 
 def print_time():
     print(f'-- {time.asctime(time.localtime())} --')

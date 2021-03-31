@@ -223,10 +223,10 @@ def gp_annotated_collate_fn(samples):
     emb_images, gen_images, categories, annotations = zip(*samples)
     return torch.stack(emb_images), torch.stack(gen_images), categories, annotations
 
-class GroceryProductsDataset(tdata.Dataset):
+class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
     def __init__(self, image_roots, skip=[r'^Background.*$', r'^.*/[Oo]riginals?$'], only=None,
         random_crop = True, min_cropped_size = 0.8,
-        test_can_load = False, include_annotations = False, index_from_file = False):
+        test_can_load = False, include_annotations = False, include_masks = False, index_from_file = False):
         super().__init__()
 
         skip = re.compile('|'.join(f'({s})' for s in skip))
@@ -237,6 +237,7 @@ class GroceryProductsDataset(tdata.Dataset):
         self.random_crop = random_crop
         self.min_cropped_size = min_cropped_size
         self.include_annotations = include_annotations
+        self.include_masks = include_masks
     def build_index(self, image_roots, skip, only, test_can_load):
         print('Building index...')
         paths = []
@@ -299,16 +300,20 @@ class GroceryProductsDataset(tdata.Dataset):
             print(f'-> Index size: {len(paths)}')
         print(f'Index built!')
         return paths, categories, annotations
-    def tensorize(self, img, tanh=False):
+    def tensorize(self, img, tanh=False, mask=False):
         new_size = (CLASSIFICATION_IMAGE_SIZE, round(CLASSIFICATION_IMAGE_SIZE * img.width / img.height)) if img.height > img.width \
             else (round(CLASSIFICATION_IMAGE_SIZE * img.height / img.width), CLASSIFICATION_IMAGE_SIZE)
         img = ttf.resize(img, new_size)
 
         w, h = img.width, img.height
         img = ttf.to_tensor(img)
+        if mask: # TODO: Consider doing this in advance instead of as a part of loading the images
+            m = utils.build_mask(img)[None]
+            m = ttf.pad(m, (0, 0, CLASSIFICATION_IMAGE_SIZE - w, CLASSIFICATION_IMAGE_SIZE - h), fill=1)
         if tanh:
             img = utils.scale_to_tanh(img)
-        return ttf.pad(img, (0, 0, CLASSIFICATION_IMAGE_SIZE - w, CLASSIFICATION_IMAGE_SIZE - h), fill=0 if tanh else 0.5)
+        img = ttf.pad(img, (0, 0, CLASSIFICATION_IMAGE_SIZE - w, CLASSIFICATION_IMAGE_SIZE - h), fill=0 if tanh else 0.5)
+        return torch.cat((img, m)) if mask else img
     def __len__(self):
         return len(self.paths)
     def __getitem__(self, i):
@@ -328,9 +333,9 @@ class GroceryProductsDataset(tdata.Dataset):
             gen_img = img
 
         if self.include_annotations:
-            return self.tensorize(img, True), self.tensorize(gen_img, True), self.categories[i], self.annotations[i]
+            return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i], self.annotations[i]
         else:
-            return self.tensorize(img, True), self.tensorize(gen_img, True), self.categories[i]
+            return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i]
 
 class GroceryProductsTestSet(tdata.Dataset):
     def __init__(self, image_dir, ann_dir, only=None, skip=None):

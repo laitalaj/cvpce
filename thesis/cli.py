@@ -38,7 +38,8 @@ SKU110K_SKIP = [
 
 
 GP_ROOT = (*DATA_DIR, 'Grocery_products')
-GP_TRAIN_FOLDERS = (GP_ROOT,)
+GP_TRAIN_FOLDERS = (utils.rel_path(*GP_ROOT, 'Training'),)
+# GP_TRAIN_FOLDERS = (utils.rel_path(*GP_ROOT),) # For reading index from file
 ''' Ye olde folders, before I found Tonioni's fixed GP set
 GP_TRAIN_FOLDERS = (
     utils.rel_path(*GP_ROOT, 'Training'),
@@ -153,11 +154,12 @@ def visualize_discriminator_target(imgs, annotations, index):
 )
 @click.option('--only', type=str, multiple=True)
 def visualize_gp(img_dir, only):
-    data = datautils.GroceryProductsDataset(img_dir, only=only if len(only) else None, include_annotations=True)
+    data = datautils.GroceryProductsDataset(img_dir, only=only if len(only) else None, include_annotations=True, include_masks=True)
     img, gen_img, hier, ann = random.choice(data)
     print(' - '.join(hier))
     print(ann)
-    utils.show_multiple([utils.scale_from_tanh(img), utils.scale_from_tanh(gen_img)])
+    mask = utils.scale_from_tanh(gen_img[3])
+    utils.show_multiple([utils.scale_from_tanh(img), utils.scale_from_tanh(gen_img[:3]), torch.stack((mask, mask, mask))])
 
 @cli.command()
 @click.option(
@@ -320,6 +322,21 @@ def planogram_test(imgs, annotations, planograms):
     comparator = production.PlanogramComparator()
     res = comparator.compare(plano, {'boxes': boxes, 'labels': anns})
     print(res)
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option('--only', type=str, multiple=True)
+def gp_mask_test(img_dir, only):
+    data = datautils.GroceryProductsDataset(img_dir, only=only if len(only) else None)
+    img, _, _ = random.choice(data)
+    img = utils.scale_from_tanh(img)
+    mask = utils.build_mask(img)
+    utils.show_multiple([img, torch.stack((mask, mask, mask))])
 
 @cli.command()
 @click.option(
@@ -621,7 +638,8 @@ def seek_sku110k_outliers(imgs, annotations, outlier_threshold, trim_module_pref
 @click.option('--batch-size', type=int, default=16)
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=1)
-def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs):
+@click.option('--masks/--no-masks', default=False)
+def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs, masks):
     options = classification_training.ClassificationTrainingOptions()
 
     options.dataset = datautils.GroceryProductsDataset(source_dir)
@@ -630,6 +648,7 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
     options.batch_size = batch_size
     options.num_workers = dataloader_workers
     options.epochs = epochs
+    options.masks = masks
 
     classification_training.pretrain_gan(options)
 
