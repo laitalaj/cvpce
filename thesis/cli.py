@@ -642,7 +642,7 @@ def seek_sku110k_outliers(imgs, annotations, outlier_threshold, trim_module_pref
 def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs, masks):
     options = classification_training.ClassificationTrainingOptions()
 
-    options.dataset = datautils.GroceryProductsDataset(source_dir)
+    options.dataset = datautils.GroceryProductsDataset(source_dir, include_masks=masks)
     options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
     options.output_path = out_dir
     options.batch_size = batch_size
