@@ -188,7 +188,7 @@ def save_gan_picture(out_path, name, model, img, target, distributed=False):
     model.eval()
     with torch.no_grad():
         result = utils.scale_from_tanh(model(img[None].cuda())[0])
-        utils.save_multiple([utils.scale_from_tanh(img), result.cpu(), target], path.join(out_path, f'{name}.png'))
+        utils.save_multiple([utils.scale_from_tanh(img[:3]), result.cpu(), target], path.join(out_path, f'{name}.png'))
     model.train()
 
 def save_dihe_picture(out_path, name, embedder, generator, imgs, distributed=False):
