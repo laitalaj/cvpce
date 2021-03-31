@@ -269,7 +269,7 @@ def pretrain_gan(options):
     )
     disc_loader = DiscriminatorLoader(options)
 
-    test_image, _, _ = options.dataset[options.sample_indices[0] % len(options.dataset)]
+    _, test_image, _ = options.dataset[options.sample_indices[0] % len(options.dataset)]
     target_image = options.discriminatorset[options.sample_indices[0] % len(options.discriminatorset)]
 
     regularization = masked_zncc if options.masks else zncc
