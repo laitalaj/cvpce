@@ -1,4 +1,4 @@
-import csv, os, re
+import csv, json, os, re
 from os import path
 
 import PIL as pil
@@ -404,3 +404,33 @@ class PlanogramTestSet(GroceryProductsTestSet):
     def __getitem__(self, i):
         img, anns, boxes = super().__getitem__(i)
         return img, anns, boxes, self.index[i]['plano']
+
+class InternalPlanoSet(tdata.Dataset):
+    def __init__(self, dir):
+        super().__init__()
+        self.index = self.build_index(dir)
+    def build_index(self, dir):
+        index_path = path.join(dir, 'index.json')
+        with open(index_path, 'r') as index_file:
+            index = json.load(index_file)
+
+        res = []
+        for obj in index:
+            img_path = path.join(dir, obj['image'])
+            with open(path.join(dir, obj['planogram']), 'r') as plano_file:
+                plano = json.load(plano_file)
+            anns = [e['code'] for e in plano]
+            boxes = torch.tensor([e['box'] for e in plano], dtype=torch.float)
+            res.append({
+                'img': img_path,
+                'anns': anns,
+                'boxes': boxes,
+            })
+        
+        return res
+    def __len__(self):
+        return len(self.index)
+    def __getitem__(self, i):
+        index_entry = self.index[i]
+        img = pil.Image.open(index_entry['img'])
+        return ttf.to_tensor(img), {'labels': index_entry['anns'], 'boxes': index_entry['boxes']}

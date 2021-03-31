@@ -278,6 +278,19 @@ def fix_gp(source_dir, out_dir, dry_run):
     print('Done!')
 
 @cli.command()
+@click.option('--dir', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
+def visualize_internal_planoset(dir):
+    data = datautils.InternalPlanoSet(dir)
+    img, plano = random.choice(data)
+
+    __, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 8))
+
+    reduced_labels = list(set(plano['labels']))
+    utils.draw_planogram(plano['boxes'], [reduced_labels.index(l) for l in plano['labels']], ax=ax1)
+    utils.build_fig(img, ax=ax2)
+    plt.show()
+
+@cli.command()
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
