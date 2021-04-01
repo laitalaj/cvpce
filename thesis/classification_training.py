@@ -126,9 +126,11 @@ def loaders_and_test_images(gpu, options):
     # might take it into use later though
     disc_loader = DiscriminatorLoader(options)
 
-    test_images = torch.stack([options.dataset[img_index % len(options.dataset)][0] for img_index in options.sample_indices])
+    test_images, gen_test_images = zip(*[options.dataset[img_index % len(options.dataset)][:2] for img_index in options.sample_indices])
+    test_images = torch.stack(test_images)
+    gen_test_images = torch.stack(gen_test_images)
 
-    return train_loader, disc_loader, train_sampler, test_images
+    return train_loader, disc_loader, train_sampler, test_images, gen_test_images
 
 def zncc(images, templates):
     assert len(images.shape) == 4, 'Expecting images with shape (idx, channels, height, width)'
@@ -191,7 +193,7 @@ def save_gan_picture(out_path, name, model, img, target, distributed=False):
         utils.save_multiple([utils.scale_from_tanh(img[:3]), result.cpu(), target], path.join(out_path, f'{name}.png'))
     model.train()
 
-def save_dihe_picture(out_path, name, embedder, generator, imgs, distributed=False):
+def save_dihe_picture(out_path, name, embedder, generator, imgs, gen_imgs, distributed=False):
     if distributed:
         embedder = embedder.module
         generator = generator.module
@@ -199,7 +201,7 @@ def save_dihe_picture(out_path, name, embedder, generator, imgs, distributed=Fal
     embedder.eval()
     generator.eval()
     with torch.no_grad():
-        fakes = generator(imgs)
+        fakes = generator(gen_imgs)
         emb_fakes = embedder(fakes)
         emb_reals = embedder(imgs)
         utils.save_emb(path.join(out_path, f'{name}.png'), utils.scale_from_tanh(imgs), emb_reals, utils.scale_from_tanh(fakes), emb_fakes)
@@ -319,7 +321,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
 
         print(f'Saving results for test images at iteration {i}...')
         img_name = f'{i:05d}'
-        save_dihe_picture(options.output_path, img_name, embedder, generator, test_images.cuda(), distributed=distributed)
+        save_dihe_picture(options.output_path, img_name, embedder, generator, test_images.cuda(), gen_test_images.cuda(), distributed=distributed)
 
         print(f'Saving model and optimizer states...')
         previous_name = 'previous_gan_checkpoint'
@@ -385,7 +387,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
     torch.cuda.set_device(gpu)
 
     embedder = classification.macvgg_embedder(model='vgg16_bn' if options.batchnorm else 'vgg16').cuda()
-    generator = classification.unet_generator().cuda()
+    generator = classification.unet_generator(options.masks).cuda()
     discriminator = classification.patchgan_discriminator().cuda()
 
     map_location = {'cuda:0': f'cuda:{gpu}'}
@@ -419,7 +421,9 @@ def train_dihe(gpu, options): # TODO: Evaluation
 
     del gan_state
 
-    train_loader, disc_loader, train_sampler, test_images = loaders_and_test_images(gpu, options)
+    train_loader, disc_loader, train_sampler, test_images, gen_test_images = loaders_and_test_images(gpu, options)
+
+    regularization = masked_zncc if options.masks else zncc
 
     first = gpu == 0
     start_epoch = state[EPOCH_KEY] + 1 if load else 0
@@ -486,7 +490,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
             positive_emb = embedder(positives)
             fake_emb = embedder(fake)
             loss_adv = nnf.binary_cross_entropy(pred_fake, torch.ones_like(pred_fake))
-            loss_regularization = -zncc(fake, gen_batch) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
+            loss_regularization = -regularization(fake, gen_batch) # negation: correlation of 1 is the best possible value, correlation of -1 the worst
             loss_emb = -distance(fake_emb, positive_emb).mean()
             loss_total = loss_adv + loss_regularization + 0.1 * loss_emb # weighting from Tonioni
             loss_total.backward()

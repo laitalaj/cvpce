@@ -686,16 +686,17 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
     default=OUT_DIR
 )
 @click.option('--batch-norm/--no-batch-norm', default=True)
+@click.option('--masks/--no-masks', default=False)
 @click.option('--batch-size', type=int, default=4)
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=10)
 @click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
 @click.option('--load-enc', default=None)
 @click.option('--gpus', type=int, default=1)
-def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_norm, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
+def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_norm, masks, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
     options = classification_training.ClassificationTrainingOptions()
 
-    options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, only=only if len(only) else None)
+    options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, include_masks=masks, only=only if len(only) else None)
     options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
     options.evalset = datautils.GroceryProductsTestSet(eval_imgs, eval_annotations, only=GP_TEST_VALIDATION_SET)
 
@@ -703,6 +704,7 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
     options.load_encoder = load_enc
     options.output_path = out_dir
     options.batchnorm = batch_norm
+    options.masks = masks
     options.batch_size = batch_size
     options.num_workers = dataloader_workers
     options.epochs = epochs
