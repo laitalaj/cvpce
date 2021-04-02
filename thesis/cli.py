@@ -566,7 +566,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         partial(hyperopt.gln,
             imgs=imgs, annotations=annotations, eval_annotations=eval_annotations, skip=SKU110K_SKIP,
             batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
-        resources_per_trial={'gpu': 1},
+        resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
         config=config,
         num_samples=samples,
         scheduler=scheduler,
