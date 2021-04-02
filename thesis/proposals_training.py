@@ -2,6 +2,7 @@ import time
 import os
 from os import path
 
+from ray import tune
 import torch
 from torch import distributed as dist
 from torch import nn
@@ -27,6 +28,15 @@ class ProposalTrainingOptions:
     load = None
     trim_module_prefix = False
 
+    optimizer_lr = 0.0025 # RetinaNet parameters w/ 1/4 learning rate
+    optimizer_momentum = 0.9
+    optimizer_decay = 0.0001
+    lr_multiplier = 0.99
+
+    scale_class = 1
+    scale_bbox = 1
+    scale_gaussian = 1
+
     batch_size = 1
     num_workers = 2
 
@@ -35,15 +45,17 @@ class ProposalTrainingOptions:
 
     gpus = 1
 
+    hyperopt = False
+
     def validate(self):
         assert self.dataset is not None, "Dataset must be set"
         assert self.evalset is not None, "Evalset must be set"
-        assert self.output_path is not None, "Output path must be set"
+        assert self.output_path is not None or self.hyperopt, "Output path must be set if not hyperopting"
 
 
-def optimizer_and_scheduler(model):
-    optimizer = topt.SGD(model.parameters(), lr=0.0025, momentum=0.9, weight_decay=0.0001) # RetinaNet parameters w/ 1/4 learning rate
-    scheduler = topt.lr_scheduler.MultiplicativeLR(optimizer, lambda _: 0.99, verbose=True) # Slightly decay learning rate after every epoch, loosely inspired by RetinaNet
+def optimizer_and_scheduler(model, options):
+    optimizer = topt.SGD(model.parameters(), lr=options.optimizer_lr, momentum=options.optimizer_momentum, weight_decay=options.optimizer_decay)
+    scheduler = topt.lr_scheduler.MultiplicativeLR(optimizer, lambda _: options.lr_multiplier, verbose=True) # Slightly decay learning rate after every epoch, loosely inspired by RetinaNet
     return optimizer, scheduler
 
 def loader_and_test_img(gpu, options):
@@ -163,7 +175,7 @@ def train_proposal_generator(gpu, options):
         )
         model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     
-    optimizer, scheduler = optimizer_and_scheduler(model)
+    optimizer, scheduler = optimizer_and_scheduler(model, options)
     if load:
         optimizer.load_state_dict(state[OPTIMIZER_STATE_DICT_KEY])
         scheduler.load_state_dict(state[SCHEDULER_STATE_DICT_KEY])
@@ -171,7 +183,7 @@ def train_proposal_generator(gpu, options):
 
     loader, sampler, test_image = loader_and_test_img(gpu, options)
 
-    first = gpu == 0
+    first = gpu == 0 and not options.hyperopt
     start_epoch = state[EPOCH_KEY] + 1 if load else 0
     end_epoch = start_epoch + options.epochs
     epoch_range = range(start_epoch, end_epoch)
@@ -200,7 +212,9 @@ def train_proposal_generator(gpu, options):
 
             loss = model(images, targets)
 
-            total_loss = loss['classification'] + loss['bbox_regression'] + loss['gaussian'] # todo: scaling (though Kant has 1 for all of these)
+            total_loss = options.scale_class * loss['classification'] \
+                + options.scale_bbox * loss['bbox_regression'] \
+                + options.scale_gaussian * loss['gaussian']
             if first and total_loss > 100:
                print(f'!!! Exploded loss at iteration {i}: {loss}')
             total_loss.backward()
@@ -228,4 +242,7 @@ def train_proposal_generator(gpu, options):
 
         scheduler.step()
         if first: best = epoch_checkpoint(e == end_epoch - 1)
+        elif options.hyperopt:
+            stats = evaluate(model, options.evalset, options.batch_size, options.num_workers, distributed=options.gpus > 1)
+            tune.report(**stats)
         if options.gpus > 1: dist.barrier() # wait for rank 0 to eval and save

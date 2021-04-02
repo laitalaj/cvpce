@@ -2,6 +2,7 @@ import os
 import random
 import re
 import shutil
+from functools import partial
 
 import click
 import torch
@@ -14,12 +15,16 @@ import torchvision.transforms as tforms
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import networkx as nx
+from ray import tune
+from ray.tune.suggest.bohb import TuneBOHB
+from ray.tune.schedulers import HyperBandForBOHB
 
 from . import datautils
 from . import utils
 from . import proposals_training, proposals_eval
 from . import classification_training, classification_eval
 from . import production
+from . import hyperopt
 from .models import proposals, classification
 
 DATA_DIR = ('..', 'data')
@@ -524,6 +529,51 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, 
         mp.spawn(proposals_training.train_proposal_generator, args=args, nprocs=gpus)
     else:
         proposals_training.train_proposal_generator(0, options)
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option(
+    '--eval-annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option('--batch-size', type=int, default=1)
+@click.option('--dataloader-workers', type=int, default=4)
+@click.option('--epochs', type=int, default=10)
+@click.option('--samples', type=int, default=100)
+def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples):
+    config = {
+        'lr': tune.uniform(0.001, 0.1),
+        'decay': tune.uniform(0.00001, 0.01),
+        'momentum': tune.uniform(0.7, 0.999),
+        'multiplier': tune.uniform(0.8, 0.99999),
+        'scale_class': tune.uniform(0.1, 10),
+        'scale_bbox': tune.uniform(0.1, 10),
+        'scale_gaussian': tune.uniform(0.1, 100)
+    }
+    algo = TuneBOHB(max_concurrent=4, metric='ap', mode='max')
+    scheduler = HyperBandForBOHB(metric='ap', mode='max', max_t=epochs)
+    result = tune.run(
+        partial(hyperopt.gln,
+            imgs=imgs, annotations=annotations, eval_annotations=eval_annotations, skip=SKU110K_SKIP,
+            batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
+        resources_per_trial={'gpu': 1},
+        config=config,
+        num_samples=samples,
+        scheduler=scheduler,
+        search_alg=algo,
+    )
+    best = result.get_best_trial('ap', 'max')
+    print(f'Best: Config: {best.config}, AP: {best.last_result["ap"]}')
 
 @cli.command()
 @click.option(
