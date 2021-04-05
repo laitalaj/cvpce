@@ -34,7 +34,6 @@ class ProposalTrainingOptions:
     lr_multiplier = 0.99
 
     scale_class = 1
-    scale_bbox = 1
     scale_gaussian = 1
 
     tanh = False
@@ -216,7 +215,7 @@ def train_proposal_generator(gpu, options):
             loss = model(images, targets)
 
             total_loss = options.scale_class * loss['classification'] \
-                + options.scale_bbox * loss['bbox_regression'] \
+                + loss['bbox_regression'] \
                 + options.scale_gaussian * loss['gaussian']
             if first and total_loss > 100:
                print(f'!!! Exploded loss at iteration {i}: {loss}')

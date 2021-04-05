@@ -16,8 +16,8 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import networkx as nx
 from ray import tune
-from ray.tune.suggest.bohb import TuneBOHB
-from ray.tune.schedulers import HyperBandForBOHB
+from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.schedulers import ASHAScheduler
 
 from . import datautils
 from . import utils
@@ -562,16 +562,47 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_
 @click.option('--samples', type=int, default=100)
 def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples):
     config = {
+        'tanh': tune.choice([True, False]),
+
         'lr': tune.uniform(0.001, 0.1),
         'decay': tune.uniform(0.00001, 0.01),
-        'momentum': tune.uniform(0.7, 0.999),
+        'momentum': tune.uniform(0.5, 0.999),
         'multiplier': tune.uniform(0.8, 0.99999),
+
         'scale_class': tune.uniform(0.1, 10),
-        'scale_bbox': tune.uniform(0.1, 10),
-        'scale_gaussian': tune.uniform(0.1, 100)
+        'scale_gaussian': tune.uniform(0.1, 100),
+
+        'gauss_loss_neg_thresh': tune.uniform(0, 1),
+        'gauss_loss_pos_thresh': tune.uniform(0, 1),
     }
-    algo = TuneBOHB(max_concurrent=4, metric='ap', mode='max')
-    scheduler = HyperBandForBOHB(metric='ap', mode='max', max_t=epochs)
+
+    initial_configs = [
+        {
+            'tanh': True,
+            'lr': 0.0025,
+            'decay': 0.0001,
+            'momentum': 0.9,
+            'multiplier': 0.99,
+            'scale_class': 1,
+            'scale_gaussian': 1,
+            'gauss_loss_neg_thresh': 0,
+            'gauss_loss_pos_thresh': 0.1,
+        },
+        {
+            'tanh': False,
+            'lr': 0.0025,
+            'decay': 0.0001,
+            'momentum': 0.9,
+            'multiplier': 0.99,
+            'scale_class': 1,
+            'scale_gaussian': 1,
+            'gauss_loss_neg_thresh': 0,
+            'gauss_loss_pos_thresh': 0.1,
+        },
+    ]
+
+    algo = HyperOptSearch(metric = 'ap', mode = 'max', points_to_evaluate=initial_configs)
+    scheduler = ASHAScheduler(metric = 'ap', mode = 'max', max_t = epochs, grace_period = 3)
     result = tune.run(
         partial(hyperopt.gln,
             imgs=imgs, annotations=annotations, eval_annotations=eval_annotations, skip=SKU110K_SKIP,
