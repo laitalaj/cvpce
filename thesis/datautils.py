@@ -1,4 +1,5 @@
 import csv, json, os, re
+from math import sqrt
 from os import path
 
 import PIL as pil
@@ -51,10 +52,19 @@ def generate_via_kant_method(size=120, sigma=40):
         return nnf.interpolate(base, size=(xx.shape[0], yy.shape[1]), mode='bilinear', align_corners=False)
     return do_generate
 
-def generate_gaussians(w, h, boxes, size_reduction=1, generate_method=generate_via_multivariate_normal(), join_method=join_via_max):
+def generate_via_simple_and_scaled(minimum = -1, maximum = 1, sigma_func = lambda c: c / 6):
+    shift = minimum
+    scale = maximum - minimum
+    def do_generate(cx, cy, width, height, xx, yy):
+        xx = (xx - cx)**2 / (2 * sigma_func(width)**2)
+        yy = (yy - cy)**2 / (2 * sigma_func(height)**2)
+        return scale * torch.exp(-(xx + yy)) + shift
+    return do_generate
+
+def generate_gaussians(w, h, boxes, size_reduction=1, generate_method=generate_via_multivariate_normal(), join_method=join_via_max, tanh=False):
     w = w // size_reduction
     h = h // size_reduction
-    img = torch.zeros((h, w))
+    img = torch.full((h, w), -1, dtype=torch.float) if tanh else torch.zeros((h, w), dtype=torch.float)
 
     for b in boxes:
         x1, y1, x2, y2 = b // size_reduction
@@ -118,7 +128,7 @@ class SKU110KBatch:
 
 class SKU110KDataset(tdata.Dataset):
     def __init__(self, img_dir_path, annotation_file_path, skip=[],
-    include_gaussians=True, gauss_generate_method=generate_via_multivariate_normal, gauss_join_method=join_via_max,
+    include_gaussians=True, gauss_generate_method=generate_via_multivariate_normal, gauss_join_method=join_via_max, tanh=False,
     flip_chance=0.5): # TODO: more augmentation stuff, maybe?
         super().__init__()
         self.img_dir = img_dir_path
@@ -126,6 +136,7 @@ class SKU110KDataset(tdata.Dataset):
         self.include_gaussians = include_gaussians
         self.generate_method = gauss_generate_method
         self.join_method = gauss_join_method
+        self.tanh = tanh
         self.flip_chance = flip_chance
     def build_index(self, annotation_file_path, skip):
         index = {}
@@ -165,7 +176,7 @@ class SKU110KDataset(tdata.Dataset):
         if self.include_gaussians:
             index_entry['gaussians'] = generate_gaussians(
                 index_entry['image_width'], index_entry['image_height'], index_entry['boxes'],
-                generate_method=self.generate_method(), join_method=self.join_method
+                generate_method=self.generate_method(), join_method=self.join_method, tanh=self.tanh,
             )
         if torch.rand(1) <= self.flip_chance:
             img, index_entry = sku110k_flip(img, index_entry, self.include_gaussians)

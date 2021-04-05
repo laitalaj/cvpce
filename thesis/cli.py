@@ -97,8 +97,8 @@ def visualize_coco(imgs, annotations):
 @click.option('--index')
 @click.option(
     '--method',
-    type=click.Choice(['normal', 'kant']),
-    default='normal'
+    type=click.Choice(['normal', 'kant', 'simple']),
+    default='simple'
 )
 @click.option('--flip/--no-flip', default=False)
 @click.option('--gaussians/--no-gaussians', default=True)
@@ -109,12 +109,16 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, 
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
+        'simple': {'gauss_generate_method': datautils.generate_via_simple_and_scaled, 'gauss_join_method': datautils.join_via_max, 'tanh': True},
     }
     data = datautils.SKU110KDataset(imgs, annotations, flip_chance=0, **gauss_methods[method])
     if index is None:
         img, anns = random.choice(data)
     else:
-        if isinstance(index, str):
+        digit_re = re.compile(r'^\d+$')
+        if digit_re.match(index) is not None:
+            index = int(index)
+        else:
             index = data.index_for_name(index)
         img, anns = data[index]
     if flip:
@@ -130,7 +134,9 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, 
     ) # TODO: Torch has a built in function for converting between coordinate systems
     if save is not None:
         utils.save(img, save, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
-    if gaussians: utils.show(anns['gaussians'])
+    if gaussians:
+        print(f'Gaussians: Min {anns["gaussians"].amin()}, Max {anns["gaussians"].amax()}')
+        utils.show(anns['gaussians'])
 
 @cli.command()
 @click.option(
@@ -497,25 +503,29 @@ def gln_build_assistant(gln, input_sizes):
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
 )
-@click.option('--method', type=click.Choice(['normal', 'kant']), default='normal')
+@click.option('--method', type=click.Choice(['normal', 'kant', 'simple']), default='normal')
+@click.option('--tanh/--no-tanh', default=False,)
 @click.option('--batch-size', type=int, default=1)
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=11)
 @click.option('--gpus', type=int, default=1)
 @click.option('--load', default=None)
 @click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
-def train_gln(imgs, annotations, eval_annotations, out_dir, method, batch_size, dataloader_workers, epochs, gpus, load, trim_module_prefix):
+def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_size, dataloader_workers, epochs, gpus, load, trim_module_prefix):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
+        'simple': {'gauss_generate_method': datautils.generate_via_simple_and_scaled, 'gauss_join_method': datautils.join_via_max},
     }
-    dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, **gauss_methods[method])
+    dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, tanh=tanh, **gauss_methods[method])
     evalset = datautils.SKU110KDataset(imgs, eval_annotations, skip=SKU110K_SKIP, include_gaussians=False)
 
     options = proposals_training.ProposalTrainingOptions()
     options.dataset = dataset
     options.evalset = evalset
     options.output_path = out_dir
+    options.tanh = tanh
+    options.gaussian_loss_params = {'tanh': True, 'negative_threshold': -1, 'positive_threshold': -0.8} if tanh else {}
     options.load = load
     options.trim_module_prefix = trim_module_prefix
     options.batch_size = batch_size

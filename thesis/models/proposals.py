@@ -79,33 +79,36 @@ class GaussianLayer(nn.Module):
         return self.up(x)
 
 class GaussianSubnetBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel):
+    def __init__(self, in_channels, out_channels, kernel, tanh=False):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel, padding=1 if kernel > 1 else 0)
-        self.activation = nn.ReLU()
+        self.activation = nn.Tanh() if tanh else nn.ReLU()
 
-        nn.init.kaiming_normal_(self.conv.weight, nonlinearity='relu')
+        if tanh:
+            nn.init.xavier_normal_(self.conv.weight, gain=nn.init.calculate_gain('tanh'))
+        else:
+            nn.init.kaiming_normal_(self.conv.weight, nonlinearity='relu')
         nn.init.constant_(self.conv.bias, 0)
     def forward(self, x):
         x = self.conv(x)
         return self.activation(x)
 
 class GaussianSubnet(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, tanh=False):
         super().__init__()
         self.blocks = nn.Sequential(
             GaussianSubnetBlock(in_channels, in_channels//2, 3),
             GaussianSubnetBlock(in_channels//2, in_channels//2, 3),
             GaussianSubnetBlock(in_channels//2, in_channels//4, 3),
             GaussianSubnetBlock(in_channels//4, in_channels//4, 1),
-            GaussianSubnetBlock(in_channels//4, 1, 1),
+            GaussianSubnetBlock(in_channels//4, 1, 1, tanh),
         )
     def forward(self, x):
         return self.blocks.forward(x)
 
 class BackboneWithFPNAndGaussians(BackboneWithFPN): # todo: gaussian layer on-off switch
     # see https://github.com/pytorch/vision/blob/master/torchvision/models/detection/backbone_utils.py#L11
-    def __init__(self, backbone, extra_fpn_block=LastLevelP6P7):
+    def __init__(self, backbone, extra_fpn_block=LastLevelP6P7, tanh=False):
         return_layers = {f'layer{i + 1}': str(i) for i in range(4)}
 
         fpn_layers = [2, 3, 4]
@@ -118,7 +121,7 @@ class BackboneWithFPNAndGaussians(BackboneWithFPN): # todo: gaussian layer on-of
 
         c2_channels = 256
         self.gaussian_layer = GaussianLayer(c2_channels, out_channels)
-        self.gaussian_subnet = GaussianSubnet(out_channels//4)
+        self.gaussian_subnet = GaussianSubnet(out_channels//4, tanh)
         self.gaussians = None
     def get_gaussians(self):
         g = self.gaussians
@@ -135,8 +138,8 @@ class BackboneWithFPNAndGaussians(BackboneWithFPN): # todo: gaussian layer on-of
 
         return p
 
-def gaussian_loss(predictions, targets, sizes, negative_threshold=0.0, positive_threshold=0.1, min_negatives=1000, negatives_per_positive=3):
-    batch_targets = torch.zeros_like(predictions) # can't be done on dataset level due to "unpredictability" -> probably could tune RetinaNet a bit
+def gaussian_loss(predictions, targets, sizes, tanh=False, negative_threshold=0.0, positive_threshold=0.1, min_negatives=1000, negatives_per_positive=3):
+    batch_targets = torch.full_like(predictions, -1) if tanh else torch.zeros_like(predictions) # can't be done on dataset level due to "unpredictability" -> probably could tune RetinaNet a bit
     for i, target_and_size in enumerate(zip(targets, sizes)):
         target, size = target_and_size
         target = target[None, None]
@@ -157,15 +160,16 @@ def gaussian_loss(predictions, targets, sizes, negative_threshold=0.0, positive_
     return (positive_se.sum() + negative_se[top_indices].sum()) / (len(positive_se) + len(top_indices))
 
 class GaussianLayerNetwork(RetinaNet):
-    def __init__(self, resnet, num_classes, extra_fpn_block=LastLevelP6P7, transform_wrapper=SizeCapturingTransform, **kwargs):
+    def __init__(self, resnet, num_classes, extra_fpn_block=LastLevelP6P7, transform_wrapper=SizeCapturingTransform, gaussian_loss_params={}, **kwargs):
         # detections_per_img: 1000 > 576 in SKU110K train, 718 in val, 533 in test > 300 (default)
         super().__init__(BackboneWithFPNAndGaussians(resnet, extra_fpn_block), num_classes, detections_per_img=1000, **kwargs)
         self.transform = transform_wrapper(self.transform)
+        self.gaussian_loss_params = gaussian_loss_params
     def compute_loss(self, targets, head_outputs, anchors):
         loss = super().compute_loss(targets, head_outputs, anchors)
 
         predicted_gaussians = self.backbone.get_gaussians()
-        loss['gaussian'] = gaussian_loss(predicted_gaussians, [t['gaussians'] for t in targets], self.transform.image_sizes)
+        loss['gaussian'] = gaussian_loss(predicted_gaussians, [t['gaussians'] for t in targets], self.transform.image_sizes, **self.gaussian_loss_params)
 
         return loss
     def forward(self, images, targets = None):
@@ -194,5 +198,5 @@ def state_logging_gln(num_classes = 1, trainable_layers=5):
     )
     return model
 
-def gln(num_classes = 1, trainable_layers=4, pretrained_backbone=True):
-    return GaussianLayerNetwork(gln_backbone(trainable_layers, pretrained_backbone), num_classes)
+def gln(num_classes = 1, trainable_layers=4, pretrained_backbone=True, tanh=False, gaussian_loss_params = {}):
+    return GaussianLayerNetwork(gln_backbone(trainable_layers, pretrained_backbone), num_classes, tanh=tanh, gaussian_loss_params=gaussian_loss_params)

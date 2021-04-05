@@ -37,6 +37,9 @@ class ProposalTrainingOptions:
     scale_bbox = 1
     scale_gaussian = 1
 
+    tanh = False
+    gaussian_loss_params = {}
+
     batch_size = 1
     num_workers = 2
 
@@ -162,7 +165,7 @@ def train_proposal_generator(gpu, options):
         state = torch.load(options.load, map_location={'cuda:0': f'cuda:{gpu}'})
 
     torch.cuda.set_device(gpu)
-    model = proposals.gln().cuda()
+    model = proposals.gln(tanh = options.tanh, gaussian_loss_params=options.gaussian_loss_params).cuda()
     if load:
         model.load_state_dict(
             utils.trim_module_prefix(state[MODEL_STATE_DICT_KEY]) if options.trim_module_prefix else state[MODEL_STATE_DICT_KEY]
