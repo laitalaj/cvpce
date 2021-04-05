@@ -160,9 +160,9 @@ def gaussian_loss(predictions, targets, sizes, tanh=False, negative_threshold=0.
     return (positive_se.sum() + negative_se[top_indices].sum()) / (len(positive_se) + len(top_indices))
 
 class GaussianLayerNetwork(RetinaNet):
-    def __init__(self, resnet, num_classes, extra_fpn_block=LastLevelP6P7, transform_wrapper=SizeCapturingTransform, gaussian_loss_params={}, **kwargs):
+    def __init__(self, resnet, num_classes, extra_fpn_block=LastLevelP6P7, transform_wrapper=SizeCapturingTransform, gaussian_loss_params={}, tanh=False, **kwargs):
         # detections_per_img: 1000 > 576 in SKU110K train, 718 in val, 533 in test > 300 (default)
-        super().__init__(BackboneWithFPNAndGaussians(resnet, extra_fpn_block), num_classes, detections_per_img=1000, **kwargs)
+        super().__init__(BackboneWithFPNAndGaussians(resnet, extra_fpn_block, tanh=tanh), num_classes, detections_per_img=1000, **kwargs)
         self.transform = transform_wrapper(self.transform)
         self.gaussian_loss_params = gaussian_loss_params
     def compute_loss(self, targets, head_outputs, anchors):
