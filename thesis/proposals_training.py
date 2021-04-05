@@ -8,6 +8,7 @@ from torch import distributed as dist
 from torch import nn
 from torch import optim as topt
 from torch.utils.data import DataLoader, distributed as distutils
+from torchvision import ops as tvops
 
 from . import datautils, proposals_eval, utils
 from .utils import print_time
@@ -75,7 +76,7 @@ def save_pictures(out_path, name, model, img, distributed=False):
     model.eval()
     with torch.no_grad():
         results = model(img[None].cuda())[0]
-        detections_all = utils.recall_tensor(results['boxes'])
+        detections_all = utils.recall_tensor(tvops.box_convert(results['boxes'], 'xyxy', 'xywh'))
         utils.save(img, path.join(out_path, f'{name}_all.png'), detections=detections_all)
         detections_gt_05 = detections_all[utils.recall_tensor(results['scores'] > .5)]
         utils.save(img, path.join(out_path, f'{name}_gt_05.png'), detections=detections_gt_05)
