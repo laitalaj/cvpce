@@ -22,34 +22,34 @@ ITERATION_KEY = 'iteration'
 BEST_STATS_KEY = 'stats'
 
 class ProposalTrainingOptions:
-    dataset = None
-    evalset = None
-    output_path = None
+    def __init__(self):
+        self.dataset = None
+        self.evalset = None
+        self.output_path = None
 
-    load = None
-    trim_module_prefix = False
+        self.load = None
+        self.trim_module_prefix = False
 
-    optimizer_lr = 0.0025 # RetinaNet parameters w/ 1/4 learning rate
-    optimizer_momentum = 0.9
-    optimizer_decay = 0.0001
-    lr_multiplier = 0.99
+        self.optimizer_lr = 0.0025 # RetinaNet parameters w/ 1/4 learning rate
+        self.optimizer_momentum = 0.9
+        self.optimizer_decay = 0.0001
+        self.lr_multiplier = 0.99
 
-    scale_class = 1
-    scale_gaussian = 1
+        self.scale_class = 1
+        self.scale_gaussian = 1
 
-    tanh = False
-    gaussian_loss_params = {}
+        self.tanh = False
+        self.gaussian_loss_params = {}
 
-    batch_size = 1
-    num_workers = 2
+        self.batch_size = 1
+        self.num_workers = 2
 
-    epochs = 1
-    checkpoint_interval = 200
+        self.epochs = 1
+        self.checkpoint_interval = 200
 
-    gpus = 1
+        self.gpus = 1
 
-    hyperopt = False
-
+        self.hyperopt = False
     def validate(self):
         assert self.dataset is not None, "Dataset must be set"
         assert self.evalset is not None, "Evalset must be set"

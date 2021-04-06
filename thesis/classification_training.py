@@ -24,29 +24,29 @@ ITERATION_KEY = 'iteration'
 BEST_STATS_KEY = 'stats'
 
 class ClassificationTrainingOptions:
-    dataset = None
-    discriminatorset = None
-    evalset = None
-    output_path = None
+    def __init__(self):
+        self.dataset = None
+        self.discriminatorset = None
+        self.evalset = None
+        self.output_path = None
 
-    load_encoder = None
-    load_gan = None
+        self.load_encoder = None
+        self.load_gan = None
 
-    min_margin = 0.05 # Numbers from Tonioni's paper
-    max_margin = 0.5
+        self.min_margin = 0.05 # Numbers from Tonioni's paper
+        self.max_margin = 0.5
 
-    batchnorm = True
-    masks = False
+        self.batchnorm = True
+        self.masks = False
 
-    batch_size = 4
-    num_workers = 8
+        self.batch_size = 4
+        self.num_workers = 8
 
-    epochs = 1
-    checkpoint_interval = 200
-    sample_indices = [4096, 4097, 4098, 128, 256, 5000, 6000, 7000, 8000]
+        self.epochs = 1
+        self.checkpoint_interval = 200
+        self.sample_indices = [4096, 4097, 4098, 128, 256, 5000, 6000, 7000, 8000]
 
-    gpus = 1
-
+        self.gpus = 1
     def validate(self, pretraining = False):
         assert self.dataset is not None, "Dataset must be set"
         assert self.discriminatorset is not None, "Discriminatorset must be set"
