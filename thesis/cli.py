@@ -560,7 +560,8 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=10)
 @click.option('--samples', type=int, default=100)
-def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples):
+@click.option('--load/--no-load', default=False)
+def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples, load):
     config = {
         'tanh': tune.choice([True, False]),
 
@@ -613,7 +614,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         num_samples=samples,
         scheduler=scheduler,
         search_alg=algo,
-        resume='PROMPT',
+        resume=load,
     )
     best = result.get_best_trial('ap', 'max')
     print(f'Best: Config: {best.config}, AP: {best.last_result["ap"]}')
