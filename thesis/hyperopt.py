@@ -32,6 +32,7 @@ def gln(config, imgs, annotations, eval_annotations, skip, batch_size, dataloade
     thresh_low = thresh_min + config['gauss_loss_neg_thresh'] * thresh_scale
     thresh_high = thresh_low + (1 - config['gauss_loss_neg_thresh']) * thresh_scale * config['gauss_loss_pos_thresh']
     options.gaussian_loss_params = {'tanh': config['tanh'], 'negative_threshold': thresh_low, 'positive_threshold': thresh_high}
+    print(f'Gaussian loss params: {options.gaussian_loss_params}')
 
     options.hyperopt = True
 
