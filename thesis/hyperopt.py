@@ -1,8 +1,6 @@
-import torch.multiprocessing as mp
+from . import datautils, proposals_training
 
-from . import datautils, proposals_training, utils
-
-def gln(config, imgs, annotations, eval_annotations, skip, batch_size, dataloader_workers, gpus, epochs):
+def gln(config, imgs, annotations, eval_annotations, skip, batch_size, dataloader_workers, epochs):
     if config['tanh']:
         dataset = datautils.SKU110KDataset(imgs, annotations, skip=skip, tanh=True,
             gauss_generate_method=datautils.generate_via_simple_and_scaled, gauss_join_method=datautils.join_via_max)
@@ -17,7 +15,6 @@ def gln(config, imgs, annotations, eval_annotations, skip, batch_size, dataloade
     options.evalset = evalset
     options.batch_size = batch_size
     options.num_workers = dataloader_workers
-    options.gpus = gpus
     options.epochs = epochs
 
     options.tanh = config['tanh']
@@ -39,8 +36,4 @@ def gln(config, imgs, annotations, eval_annotations, skip, batch_size, dataloade
 
     options.hyperopt = True
 
-    if gpus > 1:
-        utils.ensure_dist_file_clean()
-        mp.spawn(proposals_training.train_proposal_generator, args=(options,), nprocs=gpus)
-    else:
-        proposals_training.train_proposal_generator(0, options)
+    proposals_training.train_proposal_generator(0, options)

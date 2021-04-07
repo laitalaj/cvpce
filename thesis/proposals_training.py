@@ -241,14 +241,14 @@ def train_proposal_generator(gpu, options):
 
             if first and i % options.checkpoint_interval == 0:
                 checkpoint()
-            if i % options.checkpoint_interval == 0 and options.gpus > 1 and not options.hyperopt:
+            if i % options.checkpoint_interval == 0 and options.gpus > 1:
                 dist.barrier() # wait for rank 0 to checkpoint
 
             i += 1
 
         scheduler.step()
         if first: best = epoch_checkpoint(e == end_epoch - 1)
-        elif options.hyperopt and gpu == 0:
+        elif options.hyperopt:
             stats = evaluate(model, options.evalset, options.batch_size, options.num_workers, distributed=options.gpus > 1)
             tune.report(**stats)
         if options.gpus > 1: dist.barrier() # wait for rank 0 to eval and save

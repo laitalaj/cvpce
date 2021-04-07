@@ -16,7 +16,6 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import networkx as nx
 from ray import tune
-from ray.tune.suggest import ConcurrencyLimiter
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.schedulers import ASHAScheduler
 
@@ -559,11 +558,10 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_
 )
 @click.option('--batch-size', type=int, default=1)
 @click.option('--dataloader-workers', type=int, default=4)
-@click.option('--gpus', type=int, default=2)
 @click.option('--epochs', type=int, default=10)
 @click.option('--samples', type=int, default=100)
 @click.option('--load/--no-load', default=False)
-def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, gpus, epochs, samples, load):
+def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples, load):
     config = {
         'tanh': tune.choice([True, False]),
 
@@ -605,17 +603,15 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
     ]
 
     algo = HyperOptSearch(points_to_evaluate=initial_configs)
-    if gpus > 1: #TODO: hyperopt proposals training w/ multi-GPU doesn't support concurrency; should probably use Tune's torch dist integration but I'm not sure how to apply that to my situation
-        algo = ConcurrencyLimiter(algo, 1)
-    scheduler = ASHAScheduler(max_t = epochs, grace_period = 3)
+    scheduler = ASHAScheduler(max_t = epochs, grace_period = 2)
     result = tune.run(
         partial(hyperopt.gln,
             imgs=imgs, annotations=annotations, eval_annotations=eval_annotations, skip=SKU110K_SKIP,
-            batch_size=batch_size, dataloader_workers=dataloader_workers, gpus=gpus, epochs=epochs),
+            batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
         name='gln',
         metric='ap',
         mode='max',
-        resources_per_trial={'gpu': gpus, 'cpu': dataloader_workers + 1},
+        resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
         config=config,
         num_samples=samples,
         scheduler=scheduler,
