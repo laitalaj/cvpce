@@ -94,11 +94,11 @@ def save_state(out, model, optimizer, scheduler, iteration, epoch, best, distrib
         BEST_STATS_KEY: best,
     }, out)
 
-def evaluate(model, dataset, batch_size, num_workers, threshold=.75, distributed=False):
+def evaluate(model, dataset, batch_size, num_workers, threshold=.75, distributed=False, silent=False):
     if distributed: model = model.module # unwrap the actual model underlying DDP as suggested in https://discuss.pytorch.org/t/proper-distributeddataparallel-usage/74564
     model.eval()
     # async evaluation doesn't currently work with multi-GPU training; see https://bugs.python.org/issue39959 ; https://github.com/python/cpython/pull/21516
-    res = proposals_eval.evaluate_gln_sync(model, dataset, thresholds=(threshold,), batch_size=batch_size, num_workers=num_workers, plots=False)
+    res = proposals_eval.evaluate_gln_sync(model, dataset, thresholds=(threshold,), batch_size=batch_size, num_workers=num_workers, plots=False, silent=silent)
     model.train()
     return res[threshold]
 
@@ -249,6 +249,6 @@ def train_proposal_generator(gpu, options):
         scheduler.step()
         if first: best = epoch_checkpoint(e == end_epoch - 1)
         elif options.hyperopt:
-            stats = evaluate(model, options.evalset, options.batch_size, options.num_workers, distributed=options.gpus > 1)
-            tune.report(**stats)
+            stats = evaluate(model, options.evalset, options.batch_size, options.num_workers, distributed=options.gpus > 1, silent=True)
+            tune.report(average_precision=stats['ap'], **stats)
         if options.gpus > 1: dist.barrier() # wait for rank 0 to eval and save

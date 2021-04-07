@@ -609,7 +609,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
             imgs=imgs, annotations=annotations, eval_annotations=eval_annotations, skip=SKU110K_SKIP,
             batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
         name='gln',
-        metric='ap',
+        metric='average_precision',
         mode='max',
         resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
         max_failures=2, # Single-GPU training of GLN is prone to exploding gradients
@@ -620,7 +620,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         resume=load,
     )
     best = result.get_best_trial()
-    print(f'Best: Config: {best.config}, AP: {best.last_result["ap"]}')
+    print(f'Best: Config: {best.config}, AP: {best.last_result["average_precision"]}')
 
 @cli.command()
 @click.option(
