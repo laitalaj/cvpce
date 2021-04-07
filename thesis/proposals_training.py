@@ -221,7 +221,7 @@ def train_proposal_generator(gpu, options):
             if total_loss > 5000:
                 if first:
                     print(f'!!! Exploded loss at iteration {i}: {loss}')
-                elif options.hyperopt:
+                elif options.hyperopt and gpu == 0:
                     raise RuntimeError(f'Exploded loss at iteration {i}: {loss}')
             total_loss.backward()
             optimizer.step()
