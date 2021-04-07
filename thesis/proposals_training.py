@@ -218,7 +218,7 @@ def train_proposal_generator(gpu, options):
             total_loss = options.scale_class * loss['classification'] \
                 + loss['bbox_regression'] \
                 + options.scale_gaussian * loss['gaussian']
-            if total_loss > 100:
+            if total_loss > 5000:
                 if first:
                     print(f'!!! Exploded loss at iteration {i}: {loss}')
                 elif options.hyperopt:
