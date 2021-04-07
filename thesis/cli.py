@@ -612,6 +612,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         metric='ap',
         mode='max',
         resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
+        max_failures=2, # Single-GPU training of GLN is prone to exploding gradients
         config=config,
         num_samples=samples,
         scheduler=scheduler,
