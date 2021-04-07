@@ -602,13 +602,15 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         },
     ]
 
-    algo = HyperOptSearch(metric = 'ap', mode = 'max', points_to_evaluate=initial_configs)
-    scheduler = ASHAScheduler(metric = 'ap', mode = 'max', max_t = epochs, grace_period = 3)
+    algo = HyperOptSearch(points_to_evaluate=initial_configs)
+    scheduler = ASHAScheduler(max_t = epochs, grace_period = 2)
     result = tune.run(
         partial(hyperopt.gln,
             imgs=imgs, annotations=annotations, eval_annotations=eval_annotations, skip=SKU110K_SKIP,
             batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
         name='gln',
+        metric='ap',
+        mode='max',
         resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
         config=config,
         num_samples=samples,
@@ -616,7 +618,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         search_alg=algo,
         resume=load,
     )
-    best = result.get_best_trial('ap', 'max')
+    best = result.get_best_trial()
     print(f'Best: Config: {best.config}, AP: {best.last_result["ap"]}')
 
 @cli.command()
