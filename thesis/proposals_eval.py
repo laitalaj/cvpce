@@ -16,7 +16,7 @@ def load_gln(save_file, trim_module_prefix):
     model.eval()
     return model
 
-def evaluate_gln_sync(model, dataset, thresholds=(.5,), batch_size=1, num_workers=2, plots=True):
+def evaluate_gln_sync(model, dataset, thresholds=(.5,), batch_size=1, num_workers=2, plots=True, silent=False):
     loader = tdata.DataLoader(dataset,
         batch_size=batch_size, num_workers=num_workers,
         collate_fn=datautils.sku110k_no_gauss_collate_fn, pin_memory=True,
@@ -24,11 +24,11 @@ def evaluate_gln_sync(model, dataset, thresholds=(.5,), batch_size=1, num_worker
     predictions = []
     targets = []
     confidences = []
-    print('Eval start!')
+    if not silent: print('Eval start!')
     with torch.no_grad():
         for i, batch in enumerate(loader):
             if i % 100 == 0:
-                print(f'{i}...')
+                if not silent: print(f'{i}...')
             images, batch_targets = batch.cuda(non_blocking = True)
             result = model(images)
 
@@ -37,14 +37,14 @@ def evaluate_gln_sync(model, dataset, thresholds=(.5,), batch_size=1, num_worker
                 targets.append(t['boxes'].detach().cpu())
                 confidences.append(r['scores'].detach().cpu())
 
-    print('All data passed through model! Calculating metrics...')
+    if not silent: print('All data passed through model! Calculating metrics...')
     res = metrics.calculate_metrics(targets, predictions, confidences, thresholds)
-    print('Metrics calculated!')
+    if not silent: print('Metrics calculated!')
     if plots:
         for t in thresholds:
-            print(f'Plotting t={t}...')
+            if not silent: print(f'Plotting t={t}...')
             metrics.plot_prfc(res[t]['raw']['p'], res[t]['raw']['r'], res[t]['raw']['f'], res[t]['raw']['c'])
-    print('Eval done!')
+    if not silent: print('Eval done!')
     return {thresh: {k: v for k, v in itm.items() if k != 'raw'} for thresh, itm in res.items()}
 
 def evaluate_gln_async(model, dataset, thresholds=(.5,), batch_size=1, num_workers=2, num_metric_processes=4, plots=True):
