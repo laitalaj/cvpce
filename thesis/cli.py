@@ -561,7 +561,12 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_
 @click.option('--epochs', type=int, default=10)
 @click.option('--samples', type=int, default=100)
 @click.option('--load/--no-load', default=False)
-def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples, load):
+@click.option(
+    '--out-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
+    default=OUT_DIR
+)
+def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples, load, out_dir):
     config = {
         'tanh': tune.choice([True, False]),
 
@@ -619,6 +624,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         search_alg=algo,
         resume=load,
     )
+    algo.save(os.path.join(out_dir, 'gln_search.pkl'))
     best = result.get_best_trial()
     print(f'Best: Config: {best.config}, AP: {best.last_result["average_precision"]}')
 
