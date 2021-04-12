@@ -17,23 +17,6 @@ def gln(config, imgs, annotations, eval_annotations, skip, batch_size, dataloade
     options.num_workers = dataloader_workers
     options.epochs = epochs
 
-    options.tanh = config['tanh']
-
-    options.optimizer_lr = config['lr']
-    options.optimizer_decay = config['decay']
-    options.optimizer_momentum = config['momentum']
-    options.lr_multiplier = config['multiplier']
-
-    options.scale_class = config['scale_class']
-    options.scale_gaussian = config['scale_gaussian']
-
-    thresh_min = -1 if config['tanh'] else 0
-    thresh_scale = 2 if config['tanh'] else 1
-    thresh_low = thresh_min + config['gauss_loss_neg_thresh'] * thresh_scale
-    thresh_high = thresh_low + (1 - config['gauss_loss_neg_thresh']) * thresh_scale * config['gauss_loss_pos_thresh']
-    options.gaussian_loss_params = {'tanh': config['tanh'], 'negative_threshold': thresh_low, 'positive_threshold': thresh_high}
-    print(f'Gaussian loss params: {options.gaussian_loss_params}')
-
-    options.hyperopt = True
+    options.apply_hyperopt_config(config)
 
     proposals_training.train_proposal_generator(0, options)

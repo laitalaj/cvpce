@@ -570,9 +570,9 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
     config = {
         'tanh': tune.choice([True, False]),
 
-        'lr': tune.uniform(0.001, 0.1),
-        'decay': tune.uniform(0.00001, 0.01),
-        'momentum': tune.uniform(0.5, 0.999),
+#        'lr': tune.uniform(0.001, 0.1),
+#        'decay': tune.uniform(0.00001, 0.01),
+#        'momentum': tune.uniform(0.5, 0.999),
         'multiplier': tune.uniform(0.8, 0.99999),
 
         'scale_class': tune.uniform(0.1, 10),
@@ -585,9 +585,9 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
     initial_configs = [
         {
             'tanh': True,
-            'lr': 0.0025,
-            'decay': 0.0001,
-            'momentum': 0.9,
+#            'lr': 0.0025,
+#            'decay': 0.0001,
+#            'momentum': 0.9,
             'multiplier': 0.99,
             'scale_class': 1,
             'scale_gaussian': 1,
@@ -596,9 +596,9 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         },
         {
             'tanh': False,
-            'lr': 0.0025,
-            'decay': 0.0001,
-            'momentum': 0.9,
+#            'lr': 0.0025,
+#            'decay': 0.0001,
+#            'momentum': 0.9,
             'multiplier': 0.99,
             'scale_class': 1,
             'scale_gaussian': 1,
@@ -618,6 +618,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         mode='max',
         resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
         max_failures=2, # Single-GPU training of GLN is prone to exploding gradients
+        raise_on_failed_trial=False,
         config=config,
         num_samples=samples,
         scheduler=scheduler,

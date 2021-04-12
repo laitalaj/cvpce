@@ -50,6 +50,23 @@ class ProposalTrainingOptions:
         self.gpus = 1
 
         self.hyperopt = False
+    def apply_hyperopt_config(self, config):
+        self.optimizer_lr = config.get('lr', self.optimizer_lr)
+        self.optimizer_decay = config.get('decay', self.optimizer_decay)
+        self.optimizer_momentum = config.get('momentum', self.optimizer_momentum)
+        self.lr_multiplier = config.get('multiplier', self.lr_multiplier)
+
+        self.scale_class = config.get('scale_class', self.scale_class)
+        self.scale_gaussian = config.get('scale_gaussian', self.scale_gaussian)
+
+        self.tanh = config.get('tanh', self.tanh)
+        thresh_min = -1 if self.tanh else 0
+        thresh_scale = 2 if self.tanh else 1
+        thresh_low = thresh_min + config.get('gauss_loss_neg_thresh', 0) * thresh_scale
+        thresh_high = thresh_low + (1 - config.get('gauss_loss_neg_thresh', 0)) * thresh_scale * config.get('gauss_loss_pos_thresh', 0.1)
+        self.gaussian_loss_params = {'tanh': self.tanh, 'negative_threshold': thresh_low, 'positive_threshold': thresh_high}
+
+        self.hyperopt = True
     def validate(self):
         assert self.dataset is not None, "Dataset must be set"
         assert self.evalset is not None, "Evalset must be set"
