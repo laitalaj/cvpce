@@ -578,7 +578,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         'scale_class': tune.uniform(0.1, 10),
         'scale_gaussian': tune.uniform(0.1, 100),
 
-        'gauss_loss_neg_thresh': tune.uniform(0, 1),
+        'gauss_loss_neg_thresh': 0,
         'gauss_loss_pos_thresh': tune.uniform(0, 1),
     }
 
