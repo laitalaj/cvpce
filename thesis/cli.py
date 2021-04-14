@@ -556,23 +556,22 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
     default=SKU110K_ANNOTATION_FILE
 )
+@click.option('--name', type=str, default='gln')
 @click.option('--batch-size', type=int, default=1)
 @click.option('--dataloader-workers', type=int, default=4)
 @click.option('--epochs', type=int, default=10)
 @click.option('--samples', type=int, default=100)
 @click.option('--load/--no-load', default=False)
+@click.option('--load-algo', type=click.Path())
 @click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
 )
-def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_workers, epochs, samples, load, out_dir):
+def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataloader_workers, epochs, samples, load, load_algo, out_dir):
     config = {
         'tanh': tune.choice([True, False]),
 
-#        'lr': tune.uniform(0.001, 0.1),
-#        'decay': tune.uniform(0.00001, 0.01),
-#        'momentum': tune.uniform(0.5, 0.999),
         'multiplier': tune.uniform(0.8, 0.99999),
 
         'scale_class': tune.uniform(0.1, 10),
@@ -585,9 +584,6 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
     initial_configs = [
         {
             'tanh': True,
-#            'lr': 0.0025,
-#            'decay': 0.0001,
-#            'momentum': 0.9,
             'multiplier': 0.99,
             'scale_class': 1,
             'scale_gaussian': 1,
@@ -596,9 +592,6 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         },
         {
             'tanh': False,
-#            'lr': 0.0025,
-#            'decay': 0.0001,
-#            'momentum': 0.9,
             'multiplier': 0.99,
             'scale_class': 1,
             'scale_gaussian': 1,
@@ -607,13 +600,16 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         },
     ]
 
-    algo = HyperOptSearch(points_to_evaluate=initial_configs)
+    algo = HyperOptSearch(points_to_evaluate=initial_configs if not load and load_algo is not None else None)
+    if load_algo is not None:
+        algo.restore(load_algo)
+
     scheduler = ASHAScheduler(max_t = epochs, grace_period = 2)
     result = tune.run(
         partial(hyperopt.gln,
             imgs=imgs, annotations=annotations, eval_annotations=eval_annotations, skip=SKU110K_SKIP,
             batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
-        name='gln',
+        name=name,
         metric='average_precision',
         mode='max',
         resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
@@ -625,9 +621,13 @@ def hyperopt_gln(imgs, annotations, eval_annotations, batch_size, dataloader_wor
         search_alg=algo,
         resume=load,
     )
-    algo.save(os.path.join(out_dir, 'gln_search.pkl'))
+    algo.save(os.path.join(out_dir, f'{name}_search.pkl'))
     best = result.get_best_trial()
     print(f'Best: Config: {best.config}, AP: {best.last_result["average_precision"]}')
+    df = result.results_df
+    for tanh in (True, False):
+        matching = df[df['tanh'] == tanh]
+        print(f'Best with tanh={tanh}: {matching.loc[matching["ap"].idxmax()]}')
 
 @cli.command()
 @click.option(
