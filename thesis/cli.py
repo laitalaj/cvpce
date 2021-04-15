@@ -622,12 +622,11 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
         resume=load,
     )
     algo.save(os.path.join(out_dir, f'{name}_search.pkl'))
-    best = result.get_best_trial()
-    print(f'Best: Config: {best.config}, AP: {best.last_result["average_precision"]}')
     df = result.results_df
     for tanh in (True, False):
         matching = df[df['config.tanh'] == tanh]
         print(f'Best with tanh={tanh}: {matching.loc[matching["average_precision"].idxmax()]}')
+        print()
 
 @cli.command()
 @click.option(
