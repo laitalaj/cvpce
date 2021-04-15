@@ -626,7 +626,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
     print(f'Best: Config: {best.config}, AP: {best.last_result["average_precision"]}')
     df = result.results_df
     for tanh in (True, False):
-        matching = df[df['tanh'] == tanh]
+        matching = df[df['config.tanh'] == tanh]
         print(f'Best with tanh={tanh}: {matching.loc[matching["ap"].idxmax()]}')
 
 @cli.command()
