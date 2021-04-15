@@ -600,7 +600,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
         },
     ]
 
-    algo = HyperOptSearch(points_to_evaluate=initial_configs if not load or load_algo is not None else None)
+    algo = HyperOptSearch(points_to_evaluate=initial_configs if not load and load_algo is None else None)
     if load_algo is not None:
         algo.restore(load_algo)
 
