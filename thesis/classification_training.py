@@ -8,6 +8,7 @@ from torch import optim as topt
 from torch import nn
 from torch.nn import functional as nnf
 from torch.utils.data import DataLoader, distributed as distutils
+from ray import tune
 
 from . import datautils, utils, classification_eval
 from .models import classification
@@ -36,6 +37,8 @@ class ClassificationTrainingOptions:
         self.min_margin = 0.05 # Numbers from Tonioni's paper
         self.max_margin = 0.5
 
+        self.enc_multiplier = 0.99
+
         self.batchnorm = True
         self.masks = False
 
@@ -47,10 +50,17 @@ class ClassificationTrainingOptions:
         self.sample_indices = [4096, 4097, 4098, 128, 256, 5000, 6000, 7000, 8000]
 
         self.gpus = 1
+
+        self.hyperopt = False
+    def apply_hyperopt_config(self, config):
+        self.batchnorm = config.get('batchnorm', self.batchnorm)
+        self.enc_multiplier = config.get('enc_multiplier', self.enc_multiplier)
+        self.hyperopt = True
     def validate(self, pretraining = False):
         assert self.dataset is not None, "Dataset must be set"
         assert self.discriminatorset is not None, "Discriminatorset must be set"
-        assert self.output_path is not None, "Output path must be set"
+        if not self.hyperopt:
+            assert self.output_path is not None, "Output path must be set"
         if not pretraining:
             assert self.load_gan is not None, 'DIHE training should have a pretrained GAN'
             assert self.evalset is not None, 'DIHE training should have a evaluation set'
@@ -231,10 +241,10 @@ def save_embedder_state(out, model, optimizer, iteration, epoch, best, distribut
         BEST_STATS_KEY: best,
     }, out)
 
-def evaluate_dihe(model, options, distributed):
+def evaluate_dihe(model, options, distributed, verbose = True):
     if distributed: model = model.module
     model.eval()
-    accuracy = classification_eval.eval_dihe(model, options.dataset, options.evalset, options.batch_size, options.num_workers)
+    accuracy = classification_eval.eval_dihe(model, options.dataset, options.evalset, options.batch_size, options.num_workers, verbose=verbose)
     model.train()
     return accuracy
 
@@ -414,6 +424,8 @@ def train_dihe(gpu, options): # TODO: Evaluation
     gen_opt = topt.Adam(generator.parameters(), 1e-5)
     disc_opt = topt.Adam(discriminator.parameters(), 1e-5)
 
+    scheduler = topt.lr_scheduler.MultiplicativeLR(emb_opt, lambda _: options.enc_multiplier, verbose=not options.hyperopt)
+
     gen_opt.load_state_dict(gan_state[GEN_OPTIMIZER_STATE_DICT_KEY])
     disc_opt.load_state_dict(gan_state[DISC_OPTIMIZER_STATE_DICT_KEY])
     if load:
@@ -425,7 +437,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
 
     regularization = masked_zncc if options.masks else zncc
 
-    first = gpu == 0
+    first = gpu == 0 and not options.hyperopt
     start_epoch = state[EPOCH_KEY] + 1 if load else 0
     end_epoch = start_epoch + options.epochs
     epoch_range = range(start_epoch, end_epoch)
@@ -513,7 +525,11 @@ def train_dihe(gpu, options): # TODO: Evaluation
 
             i += 1
         
+        scheduler.step()
         if first:
             best = epoch_checkpoint(e == end_epoch - 1)
+        elif options.hyperopt:
+            accuracy = evaluate_dihe(embedder, options, options.gpus > 1, verbose=False)
+            tune.report(accuracy = accuracy)
         if options.gpus > 1: dist.barrier()
 

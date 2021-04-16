@@ -3,8 +3,8 @@ from torchvision import ops as tvops
 
 from . import datautils, production
 
-def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_missed = True):
-    print('Preparing classifier...')
+def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, verbose=True):
+    if verbose: print('Preparing classifier...')
     encoder.requires_grad_(False)
 
     classifier = production.Classifier(encoder, sampleset, batch_size=batch_size, num_workers=num_workers, k=k)
@@ -15,9 +15,9 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
     misclassification = {}
     total_per_ann = {}
 
-    print('Eval start!')
+    if verbose: print('Eval start!')
     for i, (img, target_anns, boxes) in enumerate(testset):
-        if i % 10 == 0:
+        if verbose and i % 10 == 0:
             print(f'{i}...')
 
         boxes = tvops.clip_boxes_to_image(boxes, (img.shape[1], img.shape[2]))
@@ -45,8 +45,8 @@ def eval_dihe(encoder, sampleset, testset, batch_size, num_workers, k=1, report_
 
     encoder.requires_grad_(True)
 
-    print(f'Total annotations: {total}, Correctly guessed: {correct}, Accuracy: {correct / total:.4f}')
-    if report_missed:
+    if verbose:
+        print(f'Total annotations: {total}, Correctly guessed: {correct}, Accuracy: {correct / total:.4f}')
         most_missed = sorted(((v / total_per_ann[k], v, k) for k, v in missed.items()), reverse=True)[:10]
         print(f'Most missed: {", ".join(f"{a} ({n}, {p * 100} %)" for p, n, a in most_missed)}')
         for _, n, k in most_missed[:3]:

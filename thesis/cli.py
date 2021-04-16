@@ -835,6 +835,81 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
 
 @cli.command()
 @click.option(
+    '--source-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option('--only', type=str, multiple=True)
+@click.option(
+    '--target-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=SKU110K_IMG_DIR
+)
+@click.option(
+    '--target-annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=SKU110K_ANNOTATION_FILE
+)
+@click.option(
+    '--eval-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--eval-annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option('--masks/--no-masks', default=False)
+@click.option('--batch-size', type=int, default=4)
+@click.option('--dataloader-workers', type=int, default=4)
+@click.option('--epochs', type=int, default=10)
+@click.option('--samples', type=int, default=100)
+@click.option('--name', type=str, default='dihe')
+@click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
+@click.option('--load/--no-load', default=False)
+@click.option('--load-algo', type=click.Path())
+@click.option(
+    '--out-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
+    default=OUT_DIR
+)
+def hyperopt_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, masks, batch_size, dataloader_workers, epochs, samples, name, load_gan, load, load_algo, out_dir):
+    config = {
+        'batchnorm': tune.choice([True, False]),
+        'multiplier': tune.uniform(0.7, 0.99999),
+    }
+
+    algo = HyperOptSearch()
+    if load_algo is not None:
+        algo.restore(load_algo)
+
+    scheduler = ASHAScheduler(max_t = epochs)
+    result = tune.run(
+        partial(hyperopt.dihe,
+            source_dir=source_dir, target_imgs=target_imgs, target_annotations=target_annotations, eval_imgs=eval_imgs, eval_annotations=eval_annotations,
+            load_gan=load_gan, masks=masks, source_only=only, target_skip=SKU110K_SKIP, eval_only=GP_TEST_VALIDATION_SET,
+            batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
+        name=name,
+        metric='accuracy',
+        mode='max',
+        resources_per_trial={'gpu': 1, 'cpu': dataloader_workers + 1},
+        config=config,
+        num_samples=samples,
+        scheduler=scheduler,
+        search_alg=algo,
+        resume=load,
+    )
+    algo.save(os.path.join(out_dir, f'{name}_search.pkl'))
+    df = result.results_df
+    for batchnorm in (True, False):
+        matching = df[df['config.batchnorm'] == batchnorm]
+        print(f'Best with batchnorm={batchnorm}: {matching.loc[matching["accuracy"].idxmax()]}')
+        print()
+
+@cli.command()
+@click.option(
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
