@@ -1,7 +1,8 @@
 import csv, json, os, re
-from math import sqrt
+from itertools import count
 from os import path
 
+import cv2
 import PIL as pil
 import torch
 from torch.nn import functional as nnf
@@ -348,6 +349,91 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         else:
             return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i]
 
+## DETECTION ##
+
+def iter_grozi_annotations(base_dir, products = 120):
+    ann_dir = path.join(base_dir, 'inSitu')
+    for p in range(1, products + 1):
+        coord_path = path.join(ann_dir, str(p), 'coordinates.txt')
+        with open(coord_path, 'r') as coord_file:
+            reader = csv.reader(coord_file, delimiter='\t')
+            for row in reader:
+                yield [p] + [int(f) for f in row]
+
+def get_extracted_img_name(video, frame):
+    return f'{video}_{frame}.jpg'
+
+def extract_grozi_test_imgs(base_dir, products = 120):
+    frames_of_interest = {}
+    print('Figuring out frames that need to be extracted...')
+    for _, video, frame, _, _, _, _ in iter_grozi_annotations(base_dir, products):
+        if video not in frames_of_interest:
+            frames_of_interest[video] = set()
+        frames_of_interest[video].add(frame)
+
+    video_dir = path.join(base_dir, 'video')
+    out_dir = path.join(base_dir, 'extracted')
+    index = []
+    if not path.exists(out_dir):
+        os.mkdir(out_dir)
+
+    for v, frames in frames_of_interest.items():
+        video_path = path.join(video_dir, f'Shelf_{v}.avi')
+        print(f'Extracting {len(frames)} images from {video_path}...')
+        cap = cv2.VideoCapture(video_path)
+        for f in count():
+            ok, frame = cap.read()
+            if not ok: break
+            if f not in frames: continue
+            filename = get_extracted_img_name(v, f)
+            cv2.imwrite(path.join(out_dir, filename), frame)
+            index.append(filename + '\n')
+            frames.remove(f)
+        if len(frames):
+            print(f'Not all frames extracted from video {v}!')
+            if len(frames) > 10:
+                print(f'  Missing frames: {", ".join(list(map(str, frames))[:10])}... (+{len(frames) - 10} more)')
+            else:
+                print(f'  Missing frames: {", ".join(map(str, frames))}')
+
+    print('Writing index...')
+    with open(path.join(out_dir, 'index.txt'), 'w') as index_file:
+        index_file.writelines(index)
+
+    print('GroZi test image extraction done!')
+
+class GroZiTestSet(tdata.Dataset):
+    def __init__(self, base_dir):
+        self.index = self.build_index(base_dir)
+    def build_index(self, base_dir):
+        index = {}
+        img_dir = path.join(base_dir, 'extracted')
+        img_index = path.join(img_dir, 'index.txt')
+        with open(img_index, 'r') as index_file:
+            for f in index_file:
+                index[f.strip()] = {
+                    'path': path.join(img_dir, f.strip()),
+                    'anns': [],
+                    'boxes': [],
+                }
+
+        for ann, video, frame, x, y, w, h in iter_grozi_annotations(base_dir):
+            index_key = get_extracted_img_name(video, frame)
+            if index_key not in index: continue
+            index[index_key]['anns'].append(ann)
+            index[index_key]['boxes'].append([x, y, x + w, y + h])
+
+        return [
+            {'path': v['path'], 'anns': torch.tensor(v['anns'], dtype=torch.long), 'boxes': torch.tensor(v['boxes'], dtype=torch.float)}
+            for v in index.values()
+        ]
+    def __len__(self):
+        return len(self.index)
+    def __getitem__(self, i):
+        index_entry = self.index[i]
+        img = pil.Image.open(index_entry['path'])
+        return ttf.to_tensor(img), index_entry['anns'], index_entry['boxes']
+
 class GroceryProductsTestSet(tdata.Dataset):
     def __init__(self, image_dir, ann_dir, only=None, skip=None):
         if only is not None and skip is not None:
@@ -402,6 +488,8 @@ class GroceryProductsTestSet(tdata.Dataset):
         index_entry = self.index[i]
         img = pil.Image.open(index_entry['path'])
         return ttf.to_tensor(img), index_entry['anns'], index_entry['boxes']
+
+## PLANOGRAMS ##
 
 class PlanogramTestSet(GroceryProductsTestSet):
     def __init__(self, image_dir, ann_dir, plano_dir, only=None, skip=None):

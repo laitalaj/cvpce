@@ -57,6 +57,8 @@ GP_PLANO_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'planograms')
 GP_TEST_VALIDATION_SET = ['s1_15.csv', 's2_3.csv', 's2_30.csv', 's2_143.csv', 's2_157.csv', 's3_111.csv', 's3_260.csv', 's5_55.csv']
 GP_PLANO_VALIDATION_SET = [f'{s.split(".")[0]}.json' for s in GP_TEST_VALIDATION_SET]
 
+GROZI_ROOT = utils.rel_path(*DATA_DIR, 'GroZi-120')
+
 MODEL_DIR = ('..', 'models')
 PRETRAINED_GAN_FILE = utils.rel_path(*MODEL_DIR, 'pretrained_dihe_gan.tar')
 ENCODER_FILE = utils.rel_path(*MODEL_DIR, 'encoder.tar')
@@ -396,6 +398,18 @@ def visualize_gaussians(imgs, annotations, method):
     coco_to_retina = lambda bbox: torch.tensor([bbox[0], bbox[1], bbox[0]+bbox[2], bbox[1]+bbox[3]])
     gauss = datautils.generate_gaussians(w, h, [coco_to_retina(ann['bbox']) for ann in anns], **gauss_methods[method])
     utils.show(gauss)
+
+@cli.command()
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
+def extract_grozi_test_images(root):
+    datautils.extract_grozi_test_imgs(root)
+
+@cli.command()
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
+def visualize_grozi(root):
+    dataset = datautils.GroZiTestSet(root)
+    img, anns, boxes = random.choice(dataset)
+    utils.show(img, groundtruth=tvops.box_convert(boxes, 'xyxy', 'xywh'), groundtruth_labels=anns)
 
 @cli.command()
 @click.option(
