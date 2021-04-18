@@ -884,6 +884,7 @@ def hyperopt_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, 
     config = {
         'batchnorm': tune.choice([True, False]),
         'multiplier': tune.uniform(0.5, 0.99999),
+        'enc_lr': tune.uniform(1e-9, 1e-3),
     }
 
     algo = HyperOptSearch()

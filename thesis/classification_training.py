@@ -36,6 +36,7 @@ class ClassificationTrainingOptions:
 
         self.min_margin = 0.05 # Numbers from Tonioni's paper
         self.max_margin = 0.5
+        self.enc_lr = 1e-6
 
         self.enc_multiplier = 0.99
 
@@ -55,6 +56,7 @@ class ClassificationTrainingOptions:
     def apply_hyperopt_config(self, config):
         self.batchnorm = config.get('batchnorm', self.batchnorm)
         self.enc_multiplier = config.get('enc_multiplier', self.enc_multiplier)
+        self.enc_lr = config.get('enc_lr', self.enc_lr)
         self.hyperopt = True
     def validate(self, pretraining = False):
         assert self.dataset is not None, "Dataset must be set"
@@ -420,8 +422,8 @@ def train_dihe(gpu, options): # TODO: Evaluation
         generator = nn.parallel.DistributedDataParallel(generator, device_ids=[gpu], process_group=dist.new_group(), broadcast_buffers=False)
         discriminator = nn.parallel.DistributedDataParallel(discriminator, device_ids=[gpu], process_group=dist.new_group(), broadcast_buffers=False)
 
-    emb_opt = topt.Adam(embedder.parameters(), 1e-6) # Learning rates from the DIHE paper
-    gen_opt = topt.Adam(generator.parameters(), 1e-5)
+    emb_opt = topt.Adam(embedder.parameters(), options.enc_lr)
+    gen_opt = topt.Adam(generator.parameters(), 1e-5) # Learning rates from the DIHE paper
     disc_opt = topt.Adam(discriminator.parameters(), 1e-5)
 
     scheduler = topt.lr_scheduler.MultiplicativeLR(emb_opt, lambda _: options.enc_multiplier, verbose=not options.hyperopt)
