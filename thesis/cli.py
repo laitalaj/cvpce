@@ -883,7 +883,7 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
 def hyperopt_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, masks, batch_size, dataloader_workers, epochs, samples, name, load_gan, load, load_algo, out_dir):
     config = {
         'batchnorm': tune.choice([True, False]),
-        'multiplier': tune.uniform(0.7, 0.99999),
+        'multiplier': tune.uniform(0.5, 0.99999),
     }
 
     algo = HyperOptSearch()
