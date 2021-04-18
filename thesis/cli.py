@@ -55,6 +55,7 @@ GP_TEST_DIR = utils.rel_path(*GP_ROOT, 'Testing')
 GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'annotations')
 GP_PLANO_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'planograms')
 GP_TEST_VALIDATION_SET = ['s1_15.csv', 's2_3.csv', 's2_30.csv', 's2_143.csv', 's2_157.csv', 's3_111.csv', 's3_260.csv', 's5_55.csv']
+GP_TEST_VALIDATION_SET_SIZE = 2
 GP_PLANO_VALIDATION_SET = [f'{s.split(".")[0]}.json' for s in GP_TEST_VALIDATION_SET]
 
 GROZI_ROOT = utils.rel_path(*DATA_DIR, 'GroZi-120')
@@ -225,7 +226,7 @@ def gp_distribution(img_dir, only):
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     default=GP_ANN_DIR
 )
-@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none')
+@click.option('--only', type=click.Choice(('none', 'test', 'val', 'keep2', 'skip2')), default='none')
 def gp_test_distribution(imgs, annotations, only):
     only_list = None
     skip_list = None
@@ -233,6 +234,10 @@ def gp_test_distribution(imgs, annotations, only):
         skip_list = GP_TEST_VALIDATION_SET
     elif only == 'val':
         only_list = GP_TEST_VALIDATION_SET
+    elif only == 'keep2':
+        only_list = 2
+    elif only == 'skip2':
+        skip_list = 2
 
     data = datautils.GroceryProductsTestSet(imgs, annotations, only=only_list, skip=skip_list)
     dist, leaf = utils.gp_test_distribution(data)
@@ -815,7 +820,7 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
 
     options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, include_masks=masks, only=only if len(only) else None)
     options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
-    options.evalset = datautils.GroceryProductsTestSet(eval_imgs, eval_annotations, only=GP_TEST_VALIDATION_SET)
+    options.evalset = datautils.GroceryProductsTestSet(eval_imgs, eval_annotations, only=GP_TEST_VALIDATION_SET_SIZE)
 
     options.load_gan = load_gan
     options.load_encoder = load_enc
@@ -889,7 +894,7 @@ def hyperopt_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, 
     result = tune.run(
         partial(hyperopt.dihe,
             source_dir=source_dir, target_imgs=target_imgs, target_annotations=target_annotations, eval_imgs=eval_imgs, eval_annotations=eval_annotations,
-            load_gan=load_gan, masks=masks, source_only=only, target_skip=SKU110K_SKIP, eval_only=GP_TEST_VALIDATION_SET,
+            load_gan=load_gan, masks=masks, source_only=only, target_skip=SKU110K_SKIP, eval_only=GP_TEST_VALIDATION_SET_SIZE,
             batch_size=batch_size, dataloader_workers=dataloader_workers, epochs=epochs),
         name=name,
         metric='accuracy',
@@ -939,9 +944,9 @@ def eval_dihe(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm,
     only_list = None
     skip_list = None
     if only == 'test':
-        skip_list = GP_TEST_VALIDATION_SET
+        skip_list = GP_TEST_VALIDATION_SET_SIZE
     elif only == 'val':
-        only_list = GP_TEST_VALIDATION_SET
+        only_list = GP_TEST_VALIDATION_SET_SIZE
     testset = datautils.GroceryProductsTestSet(test_imgs, annotations, only=only_list, skip=skip_list)
 
     if model == 'vgg16':

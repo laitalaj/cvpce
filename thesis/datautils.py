@@ -436,12 +436,13 @@ class GroZiTestSet(tdata.Dataset):
 
 class GroceryProductsTestSet(tdata.Dataset):
     def __init__(self, image_dir, ann_dir, only=None, skip=None):
-        if only is not None and skip is not None:
-            raise NotImplementedError('Can\'t have both only and skip in GroceryProductsTestSet!')
-
         super().__init__()
         self.image_dir = image_dir
-        self.index = self.build_index(ann_dir, only, skip)
+
+        self.toskip = skip if type(skip) == int else 0
+        self.tokeep = only if type(only) == int else 9999 # value larger than the max number of annotations in any image
+
+        self.index = self.build_index(ann_dir, only = None if type(only) == int else only, skip = None if type(skip) == int else skip)
     def get_image_path(self, store, image):
         return path.join(self.image_dir, f'store{store}', 'images', f'store{store}_{image}.jpg')
     def build_index(self, ann_dir, only, skip):
@@ -487,7 +488,7 @@ class GroceryProductsTestSet(tdata.Dataset):
     def __getitem__(self, i):
         index_entry = self.index[i]
         img = pil.Image.open(index_entry['path'])
-        return ttf.to_tensor(img), index_entry['anns'], index_entry['boxes']
+        return ttf.to_tensor(img), index_entry['anns'][self.toskip:self.tokeep], index_entry['boxes'][self.toskip:self.tokeep]
 
 ## PLANOGRAMS ##
 
