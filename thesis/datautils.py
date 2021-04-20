@@ -227,6 +227,30 @@ class TargetDomainDataset(SKU110KDataset):
 
         return ttf.resize(res, (CLASSIFICATION_IMAGE_SIZE, CLASSIFICATION_IMAGE_SIZE))
 
+class GroZiDataset(tdata.Dataset):
+    def __init__(self, base_dir, products=120):
+        self.index = self.build_index(base_dir, products)
+    def build_index(self, base_dir, products):
+        idx = []
+        vitro_dir = path.join(base_dir, 'inVitro')
+        for p in range(1, products + 1):
+            img_dir = path.join(vitro_dir, str(p), 'web', 'JPEG')
+            for entry in os.scandir(img_dir):
+                if entry.is_file() and entry.name.endswith('.jpg'):
+                    idx.append({'path': entry.path, 'ann': p})
+        return idx
+    def index_for_ann(self, ann):
+        for i, entry in enumerate(self.index):
+            if entry['ann'] == ann:
+                return i
+        return None
+    def __len__(self):
+        return len(self.index)
+    def __getitem__(self, i):
+        entry = self.index[i]
+        img = pil.Image.open(entry['path'])
+        return ttf.to_tensor(img), entry['ann']
+
 def gp_collate_fn(samples):
     emb_images, gen_images, categories = zip(*samples) # Returining two sets of images is a bit dirty, TODO check if you have better ideas later
     return torch.stack(emb_images), torch.stack(gen_images), categories
@@ -237,7 +261,7 @@ def gp_annotated_collate_fn(samples):
 
 class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
     def __init__(self, image_roots, skip=[r'^Background.*$', r'^.*/[Oo]riginals?$'], only=None,
-        random_crop = True, min_cropped_size = 0.8,
+        random_crop = True, min_cropped_size = 0.8, resize=True,
         test_can_load = False, include_annotations = False, include_masks = False, index_from_file = False):
         super().__init__()
 
@@ -246,6 +270,7 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
             self.paths, self.categories, self.annotations = self.build_index_from_file(image_roots, skip, only)
         else:
             self.paths, self.categories, self.annotations = self.build_index(image_roots, skip, only, test_can_load)
+        self.resize = resize
         self.random_crop = random_crop
         self.min_cropped_size = min_cropped_size
         self.include_annotations = include_annotations
@@ -312,7 +337,14 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
             print(f'-> Index size: {len(paths)}')
         print(f'Index built!')
         return paths, categories, annotations
+    def index_for_ann(self, ann):
+        for i, a in enumerate(self.annotations):
+            if a == ann:
+                return i
+        return None
     def tensorize(self, img, tanh=False, mask=False):
+        if not self.resize:
+            return ttf.to_tensor(img)
         new_size = (CLASSIFICATION_IMAGE_SIZE, round(CLASSIFICATION_IMAGE_SIZE * img.width / img.height)) if img.height > img.width \
             else (round(CLASSIFICATION_IMAGE_SIZE * img.height / img.width), CLASSIFICATION_IMAGE_SIZE)
         img = ttf.resize(img, new_size)
@@ -427,6 +459,30 @@ class GroZiTestSet(tdata.Dataset):
             {'path': v['path'], 'anns': torch.tensor(v['anns'], dtype=torch.long), 'boxes': torch.tensor(v['boxes'], dtype=torch.float)}
             for v in index.values()
         ]
+    def most_annotated(self):
+        max_anns = 0
+        max_indices = []
+        for i, entry in enumerate(self.index):
+            anns = len(entry['anns'])
+            if anns < max_anns:
+                continue
+            if anns > max_anns:
+                max_anns = anns
+                max_indices = []
+            max_indices.append(i)
+        return max_indices
+    def least_annotated(self):
+        min_anns = float('inf')
+        min_indices = []
+        for i, entry in enumerate(self.index):
+            anns = len(entry['anns'])
+            if anns > min_anns:
+                continue
+            if anns < min_anns:
+                min_anns = anns
+                min_indices = []
+            min_indices.append(i)
+        return min_indices
     def __len__(self):
         return len(self.index)
     def __getitem__(self, i):

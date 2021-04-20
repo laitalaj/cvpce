@@ -108,7 +108,8 @@ def visualize_coco(imgs, annotations):
 @click.option('--model', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True))
 @click.option('--conf-thresh', type=float, default=0.45)
 @click.option('--save', type=click.Path(writable=True))
-def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, conf_thresh, save):
+@click.option('--save-gaussians', type=click.Path(writable=True))
+def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, conf_thresh, save, save_gaussians):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
@@ -140,6 +141,8 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, 
     if gaussians:
         print(f'Gaussians: Min {anns["gaussians"].amin()}, Max {anns["gaussians"].amax()}')
         utils.show(anns['gaussians'])
+    if save_gaussians is not None:
+        utils.save(anns['gaussians'], save_gaussians)
 
 @cli.command()
 @click.option(
@@ -199,6 +202,56 @@ def visualize_gp_test(imgs, annotations, store, image):
             return
         img, anns, boxes = dataset[idx]
     utils.show(img, groundtruth=tvops.box_convert(boxes, 'xyxy', 'xywh'), groundtruth_labels=anns)
+
+@cli.command()
+@click.option(
+    '--train-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
+    '--test-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+def visualize_gp_set(train_imgs, test_imgs, annotations):
+    ann_re = re.compile(r'^(Food/)?(.*?)\..*$')
+    def shorten_ann(ann):
+        try:
+            return ann_re.match(ann).group(2)
+        except AttributeError:
+            print(f'Malformed annotation: {ann}')
+            return ann
+
+    train_set = datautils.GroceryProductsDataset(train_imgs, include_annotations=True, random_crop=False, resize=False)
+    test_set = datautils.GroceryProductsTestSet(test_imgs, annotations)
+    test_imgs, test_anns, test_boxes = zip(*[random.choice(test_set) for _ in range(2)])
+    test_boxes = [tvops.box_convert(boxes, 'xyxy', 'xywh') for boxes in test_boxes]
+
+    uniq_anns = set(test_anns[0]) | set(test_anns[1])
+    train_imgs = []
+    train_anns = []
+    for ann in uniq_anns:
+        idx = train_set.index_for_ann(ann)
+        if idx is None: continue
+        img, _, _, ann = train_set[idx]
+        train_imgs.append(img)
+        train_anns.append(ann)
+    if len(train_imgs) < 8:
+        more_imgs, _, _, more_anns = zip(*[random.choice(train_set) for _ in range(8 - len(train_imgs))])
+        train_imgs += more_imgs
+        train_anns += more_anns
+
+    test_anns = [[shorten_ann(ann) for ann in anns] for anns in test_anns]
+    train_anns = [shorten_ann(ann) for ann in train_anns]
+
+    utils.draw_dataset_sample(test_imgs, test_boxes, test_anns, train_imgs, train_anns)
 
 @cli.command()
 @click.option(
@@ -411,10 +464,51 @@ def extract_grozi_test_images(root):
 
 @cli.command()
 @click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
-def visualize_grozi(root):
+def visualize_grozi_train(root):
+    dataset = datautils.GroZiDataset(root)
+    img, _ = random.choice(dataset)
+    utils.show(img)
+
+@cli.command()
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
+@click.option('--select-from', type=click.Choice(['none', 'min', 'max']), default='none')
+def visualize_grozi(root, select_from):
     dataset = datautils.GroZiTestSet(root)
-    img, anns, boxes = random.choice(dataset)
+    if select_from == 'min':
+        idxset = dataset.least_annotated()
+        print(f'There are {len(idxset)} least-annotated images')
+    elif select_from == 'max':
+        idxset = dataset.most_annotated()
+        print(f'There are {len(idxset)} most-annotated images')
+    else:
+        idxset = range(len(dataset))
+        print(f'There are {len(dataset)} images')
+    img, anns, boxes = dataset[random.choice(idxset)]
+    print(f'Annotations in image: {len(anns)}')
     utils.show(img, groundtruth=tvops.box_convert(boxes, 'xyxy', 'xywh'), groundtruth_labels=anns)
+
+@cli.command()
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
+def visualize_grozi_set(root):
+    train_set = datautils.GroZiDataset(root)
+    test_set = datautils.GroZiTestSet(root)
+    test_imgs, test_anns, test_boxes = zip(*[random.choice(test_set) for _ in range(2)])
+    test_boxes = [tvops.box_convert(boxes, 'xyxy', 'xywh') for boxes in test_boxes]
+    test_anns = [[ann.item() for ann in anns] for anns in test_anns]
+
+    uniq_anns = set(test_anns[0]) | set(test_anns[1])
+    train_imgs = []
+    train_anns = []
+    for ann in uniq_anns:
+        idx = train_set.index_for_ann(ann)
+        img, ann = train_set[idx]
+        train_imgs.append(img)
+        train_anns.append(ann)
+    if len(train_imgs) < 8:
+        more_imgs, more_anns = zip(*[random.choice(train_set) for _ in range(8 - len(train_imgs))])
+        train_imgs += more_imgs
+        train_anns += more_anns
+    utils.draw_dataset_sample(test_imgs, test_boxes, test_anns, train_imgs, train_anns)
 
 @cli.command()
 @click.option(

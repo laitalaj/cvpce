@@ -10,6 +10,7 @@ from torchvision.transforms import functional as ttf
 import matplotlib.pyplot as plt
 import matplotlib.collections as pltcollections
 import matplotlib.patches as patches
+import matplotlib.patheffects as effects
 import squarify
 from skimage.segmentation import flood
 from skimage.filters import sobel
@@ -34,13 +35,15 @@ def plot_boxes(boxes, color='blue', hl_color = None, hl_width = 5, ax = None):
     ax.add_collection(highlightcollection)
     ax.add_collection(boxcollection)
 
-def plot_labels(labels, boxes, color='blue', ax = None):
+def plot_labels(labels, boxes, color='blue', hl_color = None, ax = None):
     if ax is None:
         ax = plt.gca()
 
+    peffects = [effects.withStroke(linewidth=3, foreground=hl_color)] if hl_color is not None else [effects.Normal()]
+
     for l, b in zip(labels, boxes):
         x, y, _, _ = b
-        ax.text(x + 12, y + 12, l, color=color, va='top', ha='left', fontweight='bold')
+        ax.text(x + 12, y + 12, l, color=color, va='top', ha='left', fontweight='bold', path_effects=peffects)
 
 def build_fig(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = [], figsize=(12, 12), ax = None):
     if ax is None:
@@ -52,8 +55,8 @@ def build_fig(img, detections = [], groundtruth = [], detection_labels = [], gro
         img = img[None]
     ax.imshow(img.numpy().transpose((1, 2, 0)), interpolation='nearest')
 
-    plot_boxes(groundtruth, 'green', ax=ax)
-    plot_labels(groundtruth_labels, groundtruth, 'green', ax=ax)
+    plot_boxes(groundtruth, 'lightgreen', 'darkgreen', ax=ax)
+    plot_labels(groundtruth_labels, groundtruth, 'lightgreen', 'darkgreen', ax=ax)
     plot_boxes(detections, 'red', ax=ax)
     plot_labels(detection_labels, detections, 'red', ax=ax)
 
@@ -148,6 +151,20 @@ def draw_planogram(boxes, labels, ax = None, xlim = None, ylim = None):
         x = (x1 + x2) / 2
         y = (y1 + y2) / 2
         ax.text(x, y, label, ha='center', va='center')
+
+def draw_dataset_sample(test_imgs, test_boxes, test_labels, train_imgs, train_labels, figsize = (5, 5)):
+    fig = plt.figure(figsize=figsize)
+    fig.set_dpi(200)
+    gs = fig.add_gridspec(4, 5)
+    train_axes = [fig.add_subplot(gs[y, x]) for y in range(4) for x in range(2)]
+    test_axes = [fig.add_subplot(gs[:2, 2:]), fig.add_subplot(gs[2:, 2:])]
+    for img, label, ax in zip(train_imgs, train_labels, train_axes):
+        ax.imshow(img.numpy().transpose((1, 2, 0)), interpolation='bilinear')
+        ax.set_title(label)
+        ax.axis('off')
+    for img, boxes, labels, ax in zip(test_imgs, test_boxes, test_labels, test_axes):
+        build_fig(img, groundtruth=boxes, groundtruth_labels=labels, ax=ax)
+    plt.show()
 
 def gp_distribution(dataset):
     res = {}
