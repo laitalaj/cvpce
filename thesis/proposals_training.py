@@ -45,7 +45,7 @@ class ProposalTrainingOptions:
         self.num_workers = 2
 
         self.epochs = 1
-        self.checkpoint_interval = 200
+        self.checkpoint_interval = 1000
 
         self.gpus = 1
 
