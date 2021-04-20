@@ -624,7 +624,8 @@ def gln_build_assistant(gln, input_sizes):
 @click.option('--gpus', type=int, default=1)
 @click.option('--load', default=None)
 @click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
-def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_size, dataloader_workers, epochs, gpus, load, trim_module_prefix):
+@click.option('--hyperopt-params/--no-hyperopt-params', default=True)
+def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_size, dataloader_workers, epochs, gpus, load, trim_module_prefix, hyperopt_params):
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
@@ -638,13 +639,19 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_
     options.evalset = evalset
     options.output_path = out_dir
     options.tanh = tanh
-    options.gaussian_loss_params = {'tanh': True, 'negative_threshold': -1, 'positive_threshold': -0.8} if tanh else {}
+    options.gaussian_loss_params = {'tanh': tanh, 'negative_threshold': -1, 'positive_threshold': -0.8} if tanh else {}
     options.load = load
     options.trim_module_prefix = trim_module_prefix
     options.batch_size = batch_size
     options.num_workers = dataloader_workers
     options.epochs = epochs
     options.gpus = gpus
+
+    if hyperopt_params:
+        options.lr_multiplier = 0.995
+        options.scale_class = 3.5
+        options.scale_gaussian = 14
+        options.gaussian_loss_params = {'tanh': tanh, 'negative_threshold': -1, 'positive_threshold': 0.3} if tanh else {'positive_threshold': 0.65}
 
     args = (options,)
     if gpus > 1:
