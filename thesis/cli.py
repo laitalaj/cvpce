@@ -649,8 +649,6 @@ def train_gln(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_
 
     if hyperopt_params:
         options.lr_multiplier = 0.995
-        options.scale_class = 3.5
-        options.scale_gaussian = 14
         options.gaussian_loss_params = {'tanh': tanh, 'negative_threshold': -1, 'positive_threshold': 0.3} if tanh else {'positive_threshold': 0.65}
 
     args = (options,)
