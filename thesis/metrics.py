@@ -61,6 +61,9 @@ def merge_matches(true_positives, false_positives, confidences, total_prediction
 
     return merged_tp, merged_fp, merged_conf
 
+def get_merge_index(c1, c2):
+    return torch.sort(torch.cat((c1, c2)), descending=True)
+
 def precision_and_recall(true_positives, false_positives, total_targets):
     true_positives = true_positives.cumsum(0)
     false_positives = false_positives.cumsum(0)
@@ -104,12 +107,8 @@ def _process_one(target, prediction, confidence, iou_thresholds):
 def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets):
     res = {}
     for t in iou_thresholds:
-        tp, fp, conf = merge_matches(
-            matches_for_threshold[t]['true_positives'],
-            matches_for_threshold[t]['false_positives'],
-            sorted_confidences,
-            total_predictions,
-        )
+        tp, fp, conf = matches_for_threshold[t]['true_positives'], matches_for_threshold[t]['false_positives'], sorted_confidences
+
         p, r = precision_and_recall(tp, fp, total_targets)
         f = f_score(p, r)
         if len(f) > 0:
@@ -135,18 +134,18 @@ def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, tot
     return res
 
 def calculate_metrics(targets, predictions, confidences, iou_thresholds = (0.5,)):
-    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
-    sorted_confidences = []
+    matches_for_threshold = {t: {'true_positives': torch.empty(0, dtype=torch.long), 'false_positives': torch.empty(0, dtype=torch.long)} for t in iou_thresholds}
+    sorted_confidences = torch.empty(0, dtype=torch.float)
     total_predictions = 0
     total_targets = 0
     for target, prediction, confidence in zip(targets, predictions, confidences):
         matches, conf, predictions, targets = _process_one(target, prediction, confidence, iou_thresholds)
-        sorted_confidences.append(conf)
+        sorted_confidences, merge_idx = get_merge_index(sorted_confidences, conf)
         total_predictions += predictions
         total_targets += targets
         for t in iou_thresholds:
-            matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
-            matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
+            matches_for_threshold[t]['true_positives'] = torch.cat((matches_for_threshold[t]['true_positives'], matches[t]['true_positives']))[merge_idx]
+            matches_for_threshold[t]['false_positives'] = torch.cat((matches_for_threshold[t]['false_positives'], matches[t]['false_positives']))[merge_idx]
 
     return _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets)
 
@@ -158,27 +157,30 @@ def _image_processer(input_queue, output_queue, iou_thresholds):
     input_queue.task_done()
 
 def _metric_calculator(output_queue, pipe, iou_thresholds):
-    proceed = pipe.recv()
-    if not proceed:
-        return
-    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
-    sorted_confidences = []
+    matches_for_threshold = {t: {'true_positives': torch.empty(0, dtype=torch.long), 'false_positives': torch.empty(0, dtype=torch.long)} for t in iou_thresholds}
+    sorted_confidences = torch.empty(0, dtype=torch.float)
     total_predictions = 0
     total_targets = 0
-    while not output_queue.empty():
-        matches, conf, predictions, targets = output_queue.get_nowait()
-        sorted_confidences.append(conf)
+    for i, (matches, conf, predictions, targets) in enumerate(iter(output_queue.get, None)):
+        if i % 100 == 0:
+                print(f'Metric calculator: {i}...')
+        sorted_confidences, merge_idx = get_merge_index(sorted_confidences, conf)
         total_predictions += predictions
         total_targets += targets
         for t in iou_thresholds:
-            matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
-            matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
+            matches_for_threshold[t]['true_positives'] = torch.cat((matches_for_threshold[t]['true_positives'], matches[t]['true_positives']))[merge_idx]
+            matches_for_threshold[t]['false_positives'] = torch.cat((matches_for_threshold[t]['false_positives'], matches[t]['false_positives']))[merge_idx]
+        output_queue.task_done()
+
+    print('-> Calculating the actual metrics...')
     res = _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets)
     pipe.send(res)
+    output_queue.task_done()
+    print(f'Done! Output queue is empty: {output_queue.empty()}')
 
 def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
     input_queue = mp.JoinableQueue()
-    output_queue = mp.Queue()
+    output_queue = mp.JoinableQueue()
     out_pipe, in_pipe = mp.Pipe()
 
     for _ in range(processes):
@@ -186,7 +188,7 @@ def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
 
     mp.Process(target=_metric_calculator, args=(output_queue, in_pipe, iou_thresholds)).start()
 
-    return input_queue, out_pipe
+    return input_queue, output_queue, out_pipe
 
 def plot_prfc(precision, recall, fscore, confidence):
     plt.plot(recall, confidence, label='Confidence')

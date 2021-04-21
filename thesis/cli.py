@@ -771,10 +771,10 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
 )
 def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, state_file):
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False)
-    thresholds = torch.linspace(.5, .95, 10) if coco else iou_threshold
+    thresholds = [f.item() for f in torch.linspace(.5, .95, 10)] if coco else iou_threshold
     evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=thresholds,
         batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix, plots=plots)
-    for t in iou_threshold:
+    for t in thresholds:
         print(f'{t}:\t{evaluation[t]}')
 
 @cli.command()

@@ -53,24 +53,31 @@ def evaluate_gln_async(model, dataset, thresholds=(.5,), batch_size=1, num_worke
         collate_fn=datautils.sku110k_no_gauss_collate_fn, pin_memory=True,
     )
 
-    queue, pipe = metrics.calculate_metrics_async(processes=num_metric_processes, iou_thresholds=thresholds)
+    queue, mqueue, pipe = metrics.calculate_metrics_async(processes=num_metric_processes, iou_thresholds=thresholds)
     print('Eval start!')
     with torch.no_grad():
         for i, batch in enumerate(loader):
             if i % 100 == 0:
-                print(f'{i}...')
+                print(f'GPU: {i}...')
             images, batch_targets = batch.cuda(non_blocking = True)
             result = model(images)
             for r, t in zip(result, batch_targets):
                 queue.put((t['boxes'].detach().cpu(), r['boxes'].detach().cpu(), r['scores'].detach().cpu()))
 
     print('All data passed through model! Waiting for metric workers...')
+    queue.join()
     for _ in range(num_metric_processes):
         queue.put(None)
     queue.join()
-    print('Starting metric calculation...')
-    pipe.send(True)
+
+    print('Waiting for queue to be emptied...')
+    mqueue.join()
+    mqueue.put(None)
+
+    print('Waiting for metric calculation...')
     res = pipe.recv()
+    mqueue.join()
+
     print('Metrics calculated!')
     if plots:
         for t in thresholds:

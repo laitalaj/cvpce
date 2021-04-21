@@ -106,3 +106,15 @@ def test_ap():
     p, r = metrics.precision_and_recall(tp, fp, sum(len(t) for t in TARGETS))
     ap = metrics.average_precision(p, r)
     assert expected_ap.isclose(ap)
+
+def test_calculate_metrics():
+    expected_precision = torch.tensor(7/12)
+    expected_recall =  torch.tensor(7/9)
+    expected_f = 2 * expected_precision * expected_recall / (expected_precision + expected_recall)
+    expected_ap = torch.tensor((1 + 1 + 5/7 + 5/7 + 5/7 + 5/7 + 7/12 + 7/12 + 0 + 0 + 0) / 11)
+
+    res = metrics.calculate_metrics(TARGETS, PREDICTIONS, CONFIDENCES)
+    assert torch.isclose(res[0.5]['ap'], expected_ap)
+    assert torch.isclose(res[0.5]['p'], expected_precision)
+    assert torch.isclose(res[0.5]['r'], expected_recall)
+    assert torch.isclose(res[0.5]['f'], expected_f)
