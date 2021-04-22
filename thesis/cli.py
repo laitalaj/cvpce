@@ -981,7 +981,7 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
 
     if hyperopt_params:
         options.enc_lr = 8e-7
-        options.enc_multiplier = 0.7
+        options.enc_multiplier = 0.9
 
     if gpus > 1:
         utils.ensure_dist_file_clean()
