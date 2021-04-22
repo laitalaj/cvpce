@@ -32,34 +32,16 @@ def check_matches(sorted_ious, indices, iou_threshold=0.5):
 
     return true_positive, false_positive
 
-def merge_matches(true_positives, false_positives, confidences, total_predictions=None): # assuming confidences sorted, e.g. matching t&fp order, here
-    def to_heap_element(elem_id, idx, conf, tp, fp):
-        return (-conf[idx], elem_id, idx, conf, tp, fp) # elem_id included to break confidence ties
+def merge_matches(matches, confidences): # NOT assuming confidences sorted
+    merged_conf = torch.cat(confidences)
+    merged_conf, sort_idx = torch.sort(merged_conf, descending=True)
 
-    if total_predictions is None:
-        total_predictions = sum(len(t) for t in true_positives)
+    merged_matches = {t: {
+            'true_positives': torch.cat(d['true_positives'])[sort_idx],
+            'false_positives': torch.cat(d['false_positives'])[sort_idx]
+        } for t, d in matches.items()}
 
-    merged_tp = torch.zeros(total_predictions)
-    merged_fp = torch.zeros(total_predictions)
-    merged_conf = torch.zeros(total_predictions, dtype=torch.float)
-
-    heap = [to_heap_element(i, 0, conf, tp, fp) for i, (conf, tp, fp) in enumerate(zip(confidences, true_positives, false_positives)) if len(conf) > 0]
-    heapq.heapify(heap)
-
-    for i in range(total_predictions):
-        _, elem_id, idx, conf, tp, fp = heap[0]
-        merged_tp[i] = tp[idx]
-        merged_fp[i] = fp[idx]
-        merged_conf[i] = conf[idx]
-        idx += 1
-        if idx < len(conf):
-            heapq.heapreplace(heap, to_heap_element(elem_id, idx, conf, tp, fp))
-        else:
-            heapq.heappop(heap)
-
-    assert len(heap) == 0, 'All lists were not fully merged, this should not happen! Was total_predictions correct?'
-
-    return merged_tp, merged_fp, merged_conf
+    return merged_matches, merged_conf
 
 def get_merge_index(c1, c2):
     return torch.sort(torch.cat((c1, c2)), descending=True)
@@ -102,13 +84,16 @@ def _process_one(target, prediction, confidence, iou_thresholds):
             'false_positives': fp,
         }
 
-    return matches_for_threshold, confidence, prediction.shape[0], target.shape[0]
+    return matches_for_threshold, confidence, target.shape[0]
 
-def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets):
+def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_targets):
     res = {}
-    for t in iou_thresholds:
-        tp, fp, conf = matches_for_threshold[t]['true_positives'], matches_for_threshold[t]['false_positives'], sorted_confidences
 
+    matches_for_threshold, conf = merge_matches(matches_for_threshold, sorted_confidences)
+
+    for t in iou_thresholds:
+        tp = matches_for_threshold[t]['true_positives']
+        fp = matches_for_threshold[t]['false_positives']
         p, r = precision_and_recall(tp, fp, total_targets)
         f = f_score(p, r)
         if len(f) > 0:
@@ -134,20 +119,18 @@ def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, tot
     return res
 
 def calculate_metrics(targets, predictions, confidences, iou_thresholds = (0.5,)):
-    matches_for_threshold = {t: {'true_positives': torch.empty(0, dtype=torch.long), 'false_positives': torch.empty(0, dtype=torch.long)} for t in iou_thresholds}
-    sorted_confidences = torch.empty(0, dtype=torch.float)
-    total_predictions = 0
+    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
+    sorted_confidences = []
     total_targets = 0
     for target, prediction, confidence in zip(targets, predictions, confidences):
-        matches, conf, predictions, targets = _process_one(target, prediction, confidence, iou_thresholds)
-        sorted_confidences, merge_idx = get_merge_index(sorted_confidences, conf)
-        total_predictions += predictions
+        matches, conf, targets = _process_one(target, prediction, confidence, iou_thresholds)
+        sorted_confidences.append(conf)
         total_targets += targets
         for t in iou_thresholds:
-            matches_for_threshold[t]['true_positives'] = torch.cat((matches_for_threshold[t]['true_positives'], matches[t]['true_positives']))[merge_idx]
-            matches_for_threshold[t]['false_positives'] = torch.cat((matches_for_threshold[t]['false_positives'], matches[t]['false_positives']))[merge_idx]
+            matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
+            matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
 
-    return _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets)
+    return _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_targets)
 
 def _image_processer(input_queue, output_queue, iou_thresholds):
     for target, prediction, confidence in iter(input_queue.get, None):
@@ -157,26 +140,21 @@ def _image_processer(input_queue, output_queue, iou_thresholds):
     input_queue.task_done()
 
 def _metric_calculator(output_queue, pipe, iou_thresholds):
-    matches_for_threshold = {t: {'true_positives': torch.empty(0, dtype=torch.long), 'false_positives': torch.empty(0, dtype=torch.long)} for t in iou_thresholds}
-    sorted_confidences = torch.empty(0, dtype=torch.float)
-    total_predictions = 0
+    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
+    sorted_confidences = []
     total_targets = 0
-    for i, (matches, conf, predictions, targets) in enumerate(iter(output_queue.get, None)):
-        if i % 100 == 0:
-                print(f'Metric calculator: {i}...')
-        sorted_confidences, merge_idx = get_merge_index(sorted_confidences, conf)
-        total_predictions += predictions
+    for matches, conf, targets in iter(output_queue.get, None):
+        sorted_confidences.append(conf)
         total_targets += targets
         for t in iou_thresholds:
-            matches_for_threshold[t]['true_positives'] = torch.cat((matches_for_threshold[t]['true_positives'], matches[t]['true_positives']))[merge_idx]
-            matches_for_threshold[t]['false_positives'] = torch.cat((matches_for_threshold[t]['false_positives'], matches[t]['false_positives']))[merge_idx]
+            matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
+            matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
         output_queue.task_done()
 
-    print('-> Calculating the actual metrics...')
-    res = _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_predictions, total_targets)
+    res = _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_targets)
     pipe.send(res)
     output_queue.task_done()
-    print(f'Done! Output queue is empty: {output_queue.empty()}')
+    print(f'Output queue is empty: {output_queue.empty()}')
 
 def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
     input_queue = mp.JoinableQueue()
@@ -190,9 +168,11 @@ def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
 
     return input_queue, output_queue, out_pipe
 
-def plot_prfc(precision, recall, fscore, confidence):
+def plot_prfc(precision, recall, fscore, confidence, title=None, resolution_reduction=1):
+    fig = plt.figure(figsize=(5, 2.5))
+
     f_max_idx = fscore.argmax()
-    plt.vlines(recall[f_max_idx], 0, 1, color='red', label='Max $F_1$')
+    plt.vlines(recall[f_max_idx], 0, 1, color='red', label='Max. $F_1$')
     plt.hlines(confidence[f_max_idx], 0, recall[f_max_idx], color='orange', linestyles='dashed')
     plt.hlines(precision[f_max_idx], 0, recall[f_max_idx], color='blue', linestyles='dashed')
     plt.hlines(fscore[f_max_idx], 0, recall[f_max_idx], color='green', linestyles='dashed')
@@ -202,12 +182,17 @@ def plot_prfc(precision, recall, fscore, confidence):
     plt.annotate(f'{precision[f_max_idx]:.2f}', (0, precision[f_max_idx]), annotation_clip=False, color='blue', ha='right', va='center')
     plt.annotate(f'{fscore[f_max_idx]:.2f}', (0, fscore[f_max_idx]), annotation_clip=False, color='green', ha='right', va='center')
 
-    plt.plot(recall, confidence, label='Confidence', color='orange')
-    plt.plot(recall, precision, label='Precision', color='blue')
-    plt.plot(recall, fscore, label='$F_1$', color='green')
+    plt.plot(recall[::resolution_reduction], confidence[::resolution_reduction], label='Confidence', color='orange')
+    plt.plot(recall[::resolution_reduction], precision[::resolution_reduction], label='Precision', color='blue')
+    plt.plot(recall[::resolution_reduction], fscore[::resolution_reduction], label='$F_1$', color='green')
 
+    if title is not None:
+        plt.title(title)
     plt.xlabel('Recall')
     plt.xlim(0, 1)
     plt.ylim(0, 1)
     plt.legend()
+
+    fig.tight_layout(pad=0.5)
+
     plt.show()

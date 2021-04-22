@@ -75,15 +75,23 @@ def tps_fps():
         tp, fp = metrics.check_matches(ious, indices)
         tps.append(tp)
         fps.append(fp)
-    return tps, fps
+    return {0.5: {'true_positives': tps, 'false_positives': fps}}
+
+def unpack_matches(matches):
+    assert len(matches) == 1
+    assert 0.5 in matches
+    assert len(matches[0.5]) == 2
+    assert 'true_positives' in matches[0.5] and 'false_positives' in matches[0.5]
+    return matches[0.5]['true_positives'], matches[0.5]['false_positives']
 
 def test_merge_matches():
     expected_tp = torch.tensor([1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0], dtype=torch.float)
     expected_fp = torch.ones_like(expected_tp) - expected_tp
     expected_conf = torch.tensor([1, 0.9, 0.85, 0.8, 0.8, 0.7, 0.65, 0.6, 0.6, 0.5, 0.4, 0.4, 0.2, 0.2, 0.1], dtype=torch.float)
 
-    tps, fps = tps_fps()
-    tp, fp, conf = metrics.merge_matches(tps, fps, CONFIDENCES)
+    matches = tps_fps()
+    matches, conf = metrics.merge_matches(matches, CONFIDENCES)
+    tp, fp = unpack_matches(matches)
     assert expected_tp.allclose(tp)
     assert expected_fp.allclose(fp)
     assert expected_conf.allclose(conf)
@@ -92,8 +100,9 @@ def test_precision_recall():
     expected_precision = torch.tensor([1, 1/2, 1/3, 2/4, 3/5, 4/6, 5/7, 5/8, 5/9, 5/10, 6/11, 7/12, 7/13, 7/14, 7/15])
     expected_recall =  torch.tensor([1/9, 1/9, 1/9, 2/9, 3/9, 4/9, 5/9, 5/9, 5/9, 5/9,  6/9,  7/9,  7/9,  7/9,  7/9])
 
-    tps, fps = tps_fps()
-    tp, fp, _ = metrics.merge_matches(tps, fps, CONFIDENCES)
+    matches = tps_fps()
+    matches, _ = metrics.merge_matches(matches, CONFIDENCES)
+    tp, fp = unpack_matches(matches)
     p, r = metrics.precision_and_recall(tp, fp, sum(len(t) for t in TARGETS))
     assert expected_precision.allclose(p)
     assert expected_recall.allclose(r)
@@ -101,8 +110,9 @@ def test_precision_recall():
 def test_ap():
     expected_ap = torch.tensor((1 + 1 + 5/7 + 5/7 + 5/7 + 5/7 + 7/12 + 7/12 + 0 + 0 + 0) / 11)
 
-    tps, fps = tps_fps()
-    tp, fp, _ = metrics.merge_matches(tps, fps, CONFIDENCES)
+    matches = tps_fps()
+    matches, _ = metrics.merge_matches(matches, CONFIDENCES)
+    tp, fp = unpack_matches(matches)
     p, r = metrics.precision_and_recall(tp, fp, sum(len(t) for t in TARGETS))
     ap = metrics.average_precision(p, r)
     assert expected_ap.isclose(ap)

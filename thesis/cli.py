@@ -777,16 +777,21 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
 @click.option('--coco/--no-coco', default=False)
 @click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
 @click.option('--plots/--no-plots', default=True)
+@click.option('--plot-res-reduction', type=int, default=200)
 @click.argument('state-file',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
-def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, state_file):
+def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, plot_res_reduction, state_file):
     dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False)
     thresholds = [f.item() for f in torch.linspace(.5, .95, 10)] if coco else iou_threshold
     evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=thresholds,
-        batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix, plots=plots)
+        batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix,
+        plots=plots, resolution_reduction=plot_res_reduction)
+    ap = 0
     for t in thresholds:
         print(f'{t}:\t{evaluation[t]}')
+        ap += evaluation[t]['ap']
+    print(f'--> AP {ap / len(thresholds)}')
 
 @cli.command()
 @click.option(
