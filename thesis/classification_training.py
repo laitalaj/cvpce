@@ -48,6 +48,7 @@ class ClassificationTrainingOptions:
 
         self.epochs = 1
         self.checkpoint_interval = 200
+        self.eval_interval = 1
         self.sample_indices = [4096, 4097, 4098, 128, 256, 5000, 6000, 7000, 8000]
 
         self.gpus = 1
@@ -368,7 +369,7 @@ def train_dihe(gpu, options): # TODO: Evaluation
         losses.save(current_path)
 
         distributed = options.gpus > 1
-        if e % 3 == 0 or final: # TODO: Configurability
+        if e % options.eval_interval == 0 or final:
             out = path.join(options.output_path, f'epoch_{e}.tar')
             gan_out = path.join(options.output_path, f'epoch_{e}_gan.tar')
             print('Evaluating...')
