@@ -364,6 +364,20 @@ def visualize_internal_planoset(dir):
     plt.show()
 
 @cli.command()
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
+def visualize_internal_set(root):
+    test_set = datautils.InternalPlanoSet(root)
+    train_set = datautils.GroceryProductsDataset(path.join(root, 'ConvertedImages'), include_annotations=True, random_crop=False, resize=False)
+    test_imgs, _ = zip(*[random.choice(test_set) for _ in range(2)])
+
+    train_imgs, _, _, train_anns = zip(*[random.choice(train_set) for _ in range(8 - len(train_imgs))])
+
+    #test_anns = [[shorten_ann(ann) for ann in anns] for anns in test_anns]
+    #train_anns = [shorten_ann(ann) for ann in train_anns]
+
+    utils.draw_dataset_sample(test_imgs, [], [], train_imgs, train_anns)
+
+@cli.command()
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
@@ -906,7 +920,7 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
 )
-@click.option('--batch-norm/--no-batch-norm', default=True)
+@click.option('--batch-norm/--no-batch-norm', default=False)
 @click.option('--masks/--no-masks', default=False)
 @click.option('--batch-size', type=int, default=4)
 @click.option('--dataloader-workers', type=int, default=4)
@@ -914,7 +928,8 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
 @click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
 @click.option('--load-enc', default=None)
 @click.option('--gpus', type=int, default=1)
-def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_norm, masks, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus):
+@click.option('--hyperopt-params/--no-hyperopt-params', default=True)
+def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_norm, masks, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus, hyperopt_params):
     options = classification_training.ClassificationTrainingOptions()
 
     options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, include_masks=masks, only=only if len(only) else None)
@@ -930,6 +945,10 @@ def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eva
     options.num_workers = dataloader_workers
     options.epochs = epochs
     options.gpus = gpus
+
+    if hyperopt_params:
+        options.enc_lr = 8e-7
+        options.enc_multiplier = 0.7
 
     if gpus > 1:
         utils.ensure_dist_file_clean()

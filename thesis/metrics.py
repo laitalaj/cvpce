@@ -191,10 +191,21 @@ def calculate_metrics_async(processes = 4, iou_thresholds = (0.5,)):
     return input_queue, output_queue, out_pipe
 
 def plot_prfc(precision, recall, fscore, confidence):
-    plt.plot(recall, confidence, label='Confidence')
-    plt.plot(recall, precision, label='Precision')
-    plt.plot(recall, fscore, label='$F_1$')
-    plt.vlines(recall[fscore.argmax()], 0, 1, color='red', label='Max $F_1$')
+    f_max_idx = fscore.argmax()
+    plt.vlines(recall[f_max_idx], 0, 1, color='red', label='Max $F_1$')
+    plt.hlines(confidence[f_max_idx], 0, recall[f_max_idx], color='orange', linestyles='dashed')
+    plt.hlines(precision[f_max_idx], 0, recall[f_max_idx], color='blue', linestyles='dashed')
+    plt.hlines(fscore[f_max_idx], 0, recall[f_max_idx], color='green', linestyles='dashed')
+
+    plt.annotate(f'{recall[f_max_idx]:.2f}', (recall[f_max_idx], 0), annotation_clip=False, color='red', ha='center', va='top')
+    plt.annotate(f'{confidence[f_max_idx]:.2f}', (0, confidence[f_max_idx]), annotation_clip=False, color='orange', ha='right', va='center')
+    plt.annotate(f'{precision[f_max_idx]:.2f}', (0, precision[f_max_idx]), annotation_clip=False, color='blue', ha='right', va='center')
+    plt.annotate(f'{fscore[f_max_idx]:.2f}', (0, fscore[f_max_idx]), annotation_clip=False, color='green', ha='right', va='center')
+
+    plt.plot(recall, confidence, label='Confidence', color='orange')
+    plt.plot(recall, precision, label='Precision', color='blue')
+    plt.plot(recall, fscore, label='$F_1$', color='green')
+
     plt.xlabel('Recall')
     plt.xlim(0, 1)
     plt.ylim(0, 1)
