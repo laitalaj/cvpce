@@ -367,15 +367,14 @@ def visualize_internal_planoset(dir):
 @click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
 def visualize_internal_set(root):
     test_set = datautils.InternalPlanoSet(root)
-    train_set = datautils.GroceryProductsDataset(path.join(root, 'ConvertedImages'), include_annotations=True, random_crop=False, resize=False)
-    test_imgs, _ = zip(*[random.choice(test_set) for _ in range(2)])
+    train_set = datautils.InternalTrainSet(os.path.join(root, 'ConvertedProducts'), include_annotations=True, random_crop=False, resize=False)
 
-    train_imgs, _, _, train_anns = zip(*[random.choice(train_set) for _ in range(8 - len(train_imgs))])
+    test_imgs = [random.choice(test_set)[0] for _ in range(2)]
+    train_imgs, _, _, train_anns = zip(*[random.choice(train_set) for _ in range(8)])
+    train_anns = [ann[:8] for ann in train_anns]
 
-    #test_anns = [[shorten_ann(ann) for ann in anns] for anns in test_anns]
-    #train_anns = [shorten_ann(ann) for ann in train_anns]
-
-    utils.draw_dataset_sample(test_imgs, [], [], train_imgs, train_anns)
+    print(f'Different products: {len(set(train_set.annotations))}')
+    utils.draw_dataset_sample(test_imgs, [[],[]], [[],[]], train_imgs, train_anns)
 
 @cli.command()
 @click.option(

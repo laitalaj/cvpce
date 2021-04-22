@@ -53,7 +53,7 @@ def build_fig(img, detections = [], groundtruth = [], detection_labels = [], gro
 
     if len(img.shape) == 2:
         img = img[None]
-    ax.imshow(img.numpy().transpose((1, 2, 0)), interpolation='nearest')
+    ax.imshow(img.numpy().transpose((1, 2, 0)), interpolation='bilinear')
 
     plot_boxes(groundtruth, 'lightgreen', 'darkgreen', ax=ax)
     plot_labels(groundtruth_labels, groundtruth, 'lightgreen', 'darkgreen', ax=ax)

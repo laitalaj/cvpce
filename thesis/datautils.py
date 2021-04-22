@@ -381,6 +381,15 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         else:
             return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i]
 
+class InternalTrainSet(GroceryProductsDataset):
+    def __init__(self, root, skip=[r'^Unknown.*$'], random_crop=True, resize=True, include_annotations = False, include_masks = False):
+        super().__init__([root], skip=skip, random_crop=random_crop, resize=resize, include_annotations=include_annotations, include_masks=include_masks)
+    def build_index(self, image_roots, skip, only, test_can_load):
+        ann_re = re.compile(r'^(.+/)*(\d+).png')
+        paths, categories, annotations = super().build_index(image_roots, skip, only, test_can_load)
+        annotations = [ann_re.match(ann).group(2) for ann in annotations]
+        return paths, categories, annotations
+
 ## DETECTION ##
 
 def iter_grozi_annotations(base_dir, products = 120):
