@@ -75,13 +75,9 @@ def tps_fps():
         tp, fp = metrics.check_matches(ious, indices)
         tps.append(tp)
         fps.append(fp)
-    return {0.5: {'true_positives': tps, 'false_positives': fps}}
+    return {0.5: {'true_positives': tps, 'false_positives': fps, 'recall_300': [1, 3/4, 1/2]}}
 
 def unpack_matches(matches):
-    assert len(matches) == 1
-    assert 0.5 in matches
-    assert len(matches[0.5]) == 2
-    assert 'true_positives' in matches[0.5] and 'false_positives' in matches[0.5]
     return matches[0.5]['true_positives'], matches[0.5]['false_positives']
 
 def test_merge_matches():
@@ -122,9 +118,11 @@ def test_calculate_metrics():
     expected_recall =  torch.tensor(7/9)
     expected_f = 2 * expected_precision * expected_recall / (expected_precision + expected_recall)
     expected_ap = torch.tensor((1 + 1 + 5/7 + 5/7 + 5/7 + 5/7 + 7/12 + 7/12 + 0 + 0 + 0) / 11)
+    expected_ar = torch.tensor((1 + 3/4 + 1/2) / 3)
 
     res = metrics.calculate_metrics(TARGETS, PREDICTIONS, CONFIDENCES)
     assert torch.isclose(res[0.5]['ap'], expected_ap)
+    assert torch.isclose(res[0.5]['ar_300'], expected_ar)
     assert torch.isclose(res[0.5]['p'], expected_precision)
     assert torch.isclose(res[0.5]['r'], expected_recall)
     assert torch.isclose(res[0.5]['f'], expected_f)

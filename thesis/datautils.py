@@ -179,7 +179,7 @@ class SKU110KDataset(tdata.Dataset):
                 index_entry['image_width'], index_entry['image_height'], index_entry['boxes'],
                 generate_method=self.generate_method(), join_method=self.join_method, tanh=self.tanh,
             )
-        if torch.rand(1) <= self.flip_chance:
+        if torch.rand(1) < self.flip_chance:
             img, index_entry = sku110k_flip(img, index_entry, self.include_gaussians)
         try:
             return ttf.to_tensor(img), index_entry
@@ -500,7 +500,7 @@ class GroZiTestSet(tdata.Dataset):
         return ttf.to_tensor(img), index_entry['anns'], index_entry['boxes']
 
 class GroceryProductsTestSet(tdata.Dataset):
-    def __init__(self, image_dir, ann_dir, only=None, skip=None):
+    def __init__(self, image_dir, ann_dir, only=None, skip=None, retinanet_annotations=False):
         super().__init__()
         self.image_dir = image_dir
 
@@ -508,6 +508,8 @@ class GroceryProductsTestSet(tdata.Dataset):
         self.tokeep = only if type(only) == int else 9999 # value larger than the max number of annotations in any image
 
         self.index = self.build_index(ann_dir, only = None if type(only) == int else only, skip = None if type(skip) == int else skip)
+
+        self.retinanet_annotations = retinanet_annotations
     def get_image_path(self, store, image):
         return path.join(self.image_dir, f'store{store}', 'images', f'store{store}_{image}.jpg')
     def build_index(self, ann_dir, only, skip):
@@ -553,7 +555,10 @@ class GroceryProductsTestSet(tdata.Dataset):
     def __getitem__(self, i):
         index_entry = self.index[i]
         img = pil.Image.open(index_entry['path'])
-        return ttf.to_tensor(img), index_entry['anns'][self.toskip:self.tokeep], index_entry['boxes'][self.toskip:self.tokeep]
+        if self.retinanet_annotations:
+            return ttf.to_tensor(img), {'labels': torch.zeros_like(index_entry['boxes'][self.toskip:self.tokeep]), 'boxes': index_entry['boxes'][self.toskip:self.tokeep]} # TODO: Actual annotations here
+        else:
+            return ttf.to_tensor(img), index_entry['anns'][self.toskip:self.tokeep], index_entry['boxes'][self.toskip:self.tokeep]
 
 ## PLANOGRAMS ##
 

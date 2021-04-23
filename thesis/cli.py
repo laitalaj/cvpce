@@ -48,12 +48,12 @@ GP_TRAIN_FOLDERS = (utils.rel_path(*GP_ROOT, 'Training'),)
 ''' Ye olde folders, before I found Tonioni's fixed GP set
 GP_TRAIN_FOLDERS = (
     utils.rel_path(*GP_ROOT, 'Training'),
-    utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'extra_products'),
+    utils.rel_path(*DATA_DIR, 'Planogram_Dataset', 'extra_products'),
 )
 '''
 GP_TEST_DIR = utils.rel_path(*GP_ROOT, 'Testing')
-GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'annotations')
-GP_PLANO_DIR = utils.rel_path(*DATA_DIR, 'Planogram Dataset', 'planograms')
+GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram_Dataset', 'annotations')
+GP_PLANO_DIR = utils.rel_path(*DATA_DIR, 'Planogram_Dataset', 'planograms')
 GP_TEST_VALIDATION_SET = ['s1_15.csv', 's2_3.csv', 's2_30.csv', 's2_143.csv', 's2_157.csv', 's3_111.csv', 's3_260.csv', 's5_55.csv']
 GP_TEST_VALIDATION_SET_SIZE = 2
 GP_PLANO_VALIDATION_SET = [f'{s.split(".")[0]}.json' for s in GP_TEST_VALIDATION_SET]
@@ -760,6 +760,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
         print()
 
 @cli.command()
+@click.option('--dataset', type=click.Choice(('sku110k', 'gp180')), default='sku110k')
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
@@ -767,7 +768,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
 )
 @click.option(
     '--annotations',
-    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    type=click.Path(exists=True),
     default=SKU110K_ANNOTATION_FILE
 )
 @click.option('--batch-size', type=int, default=1)
@@ -781,17 +782,24 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
 @click.argument('state-file',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
-def eval_gln(imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, plot_res_reduction, state_file):
-    dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False)
+def eval_gln(dataset, imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, plot_res_reduction, state_file):
+    if dataset == 'sku110k':
+        dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False, flip_chance=0)
+    else:
+        dataset = datautils.GroceryProductsTestSet(imgs, annotations, retinanet_annotations=True)
+
     thresholds = [f.item() for f in torch.linspace(.5, .95, 10)] if coco else iou_threshold
     evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=thresholds,
         batch_size=batch_size, num_workers=dataloader_workers, num_metric_processes=metric_workers, trim_module_prefix=trim_module_prefix,
         plots=plots, resolution_reduction=plot_res_reduction)
     ap = 0
+    ar = 0
     for t in thresholds:
         print(f'{t}:\t{evaluation[t]}')
         ap += evaluation[t]['ap']
+        ar += evaluation[t]['ar_300']
     print(f'--> AP {ap / len(thresholds)}')
+    print(f'--> AR300 {ar / len(thresholds)}')
 
 @cli.command()
 @click.option(

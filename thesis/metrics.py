@@ -38,7 +38,8 @@ def merge_matches(matches, confidences): # NOT assuming confidences sorted
 
     merged_matches = {t: {
             'true_positives': torch.cat(d['true_positives'])[sort_idx],
-            'false_positives': torch.cat(d['false_positives'])[sort_idx]
+            'false_positives': torch.cat(d['false_positives'])[sort_idx],
+            'ar_300': sum(d['recall_300']) / len(d['recall_300']),
         } for t, d in matches.items()}
 
     return merged_matches, merged_conf
@@ -79,9 +80,11 @@ def _process_one(target, prediction, confidence, iou_thresholds):
     matches_for_threshold = {}
     for t in iou_thresholds:
         tp, fp = check_matches(iou_matrix, index_matrix, t)
+        _, r = precision_and_recall(tp, fp, len(target))
         matches_for_threshold[t] = {
             'true_positives': tp,
             'false_positives': fp,
+            'recall_300': r[:300][-1] if len(r) > 0 else 0,
         }
 
     return matches_for_threshold, confidence, target.shape[0]
@@ -115,11 +118,12 @@ def _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, tot
             'r': best_r,
             'c': conf_thresh,
             'ap': average_precision(p, r),
+            'ar_300': matches_for_threshold[t]['ar_300'],
         }
     return res
 
 def calculate_metrics(targets, predictions, confidences, iou_thresholds = (0.5,)):
-    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
+    matches_for_threshold = {t: {'true_positives': [], 'false_positives': [], 'recall_300': []} for t in iou_thresholds}
     sorted_confidences = []
     total_targets = 0
     for target, prediction, confidence in zip(targets, predictions, confidences):
@@ -129,6 +133,7 @@ def calculate_metrics(targets, predictions, confidences, iou_thresholds = (0.5,)
         for t in iou_thresholds:
             matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
             matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
+            matches_for_threshold[t]['recall_300'].append(matches[t]['recall_300'])
 
     return _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_targets)
 
@@ -140,7 +145,7 @@ def _image_processer(input_queue, output_queue, iou_thresholds):
     input_queue.task_done()
 
 def _metric_calculator(output_queue, pipe, iou_thresholds):
-    matches_for_threshold = {t: {'true_positives': [], 'false_positives': []} for t in iou_thresholds}
+    matches_for_threshold = {t: {'true_positives': [], 'false_positives': [], 'recall_300': []} for t in iou_thresholds}
     sorted_confidences = []
     total_targets = 0
     for matches, conf, targets in iter(output_queue.get, None):
@@ -149,6 +154,7 @@ def _metric_calculator(output_queue, pipe, iou_thresholds):
         for t in iou_thresholds:
             matches_for_threshold[t]['true_positives'].append(matches[t]['true_positives'])
             matches_for_threshold[t]['false_positives'].append(matches[t]['false_positives'])
+            matches_for_threshold[t]['recall_300'].append(matches[t]['recall_300'])
         output_queue.task_done()
 
     res = _do_calculate(iou_thresholds, matches_for_threshold, sorted_confidences, total_targets)
