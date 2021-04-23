@@ -1089,7 +1089,7 @@ def hyperopt_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, 
 @click.option('--dataloader-workers', type=int, default=8)
 @click.option('--enc-weights')
 @click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none')
-@click.option('--knn', default=1)
+@click.option('--knn', type=int, multiple=True, default=(1,))
 def eval_dihe(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm, batch_size, dataloader_workers, enc_weights, only, knn):
     sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
 
@@ -1105,10 +1105,10 @@ def eval_dihe(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm,
         encoder = classification.macvgg_embedder(model='vgg16_bn' if batch_norm else 'vgg16', pretrained=enc_weights is None).cuda()
     elif model == 'resnet50':
         encoder = classification.macresnet_encoder(pretrained=enc_weights is None, desc_layers=resnet_layers).cuda()
-    encoder.eval()
     if enc_weights is not None:
         state = torch.load(enc_weights)
         encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
+    encoder.eval()
 
     classification_eval.eval_dihe(encoder, sampleset, testset, batch_size, dataloader_workers, k=knn)
 

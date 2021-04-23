@@ -63,7 +63,7 @@ def build_fig(img, detections = [], groundtruth = [], detection_labels = [], gro
 def build_emb_fig(anchors, emb_anchors, positives, emb_positives, figsize=(12, 12)):
     assert len(anchors) <= 10 and len(positives) <= 10, 'Max. 10 supported atm'
 
-    nns = recall_tensor(nearest_neighbors(emb_anchors, emb_positives))
+    nns = recall_tensor(nearest_neighbors(emb_anchors, emb_positives)[:, 0])
 
     emb_all = torch.cat((emb_anchors, emb_positives))
     components = recall_tensor(pca(emb_all))

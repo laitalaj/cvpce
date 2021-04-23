@@ -24,5 +24,5 @@ def test_nearest_neigbors():
     ])
     expected = torch.tensor([0, 4, 3, 0, 1, 5, 3])
 
-    actual = classification.nearest_neighbors(anchors, queries)
+    actual = classification.nearest_neighbors(anchors, queries)[:, 0]
     assert expected.equal(actual)

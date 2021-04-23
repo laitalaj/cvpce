@@ -316,6 +316,7 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         self.include_masks = include_masks
     def build_index(self, image_roots, skip, only, test_can_load):
         print('Building index...')
+        annotation_re = re.compile(r'^(.+)\.\w+$')
         paths = []
         categories = []
         annotations = []
@@ -345,7 +346,10 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
                                 continue
                         paths.append(entry.path)
                         categories.append(current_hierarchy)
-                        annotations.append('/'.join([*current_hierarchy, entry.name]))
+                        match = annotation_re.match(entry.name)
+                        if match is None:
+                            print(f'Nonconforming filename: {entry.name}, skipping')
+                        annotations.append('/'.join([*current_hierarchy, match.group(1)]))
             print(f'-> Index size: {len(paths)}')
         print('Index built!')
         if test_can_load and skipped:
@@ -353,7 +357,7 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
             if len(skipped) < 10:
                 print(f'(Skipped: {skipped})')
         return paths, categories, annotations
-    def build_index_from_file(self, dataset_roots, skip, only, index_filename = 'TrainingFiles.txt'):
+    def build_index_from_file(self, dataset_roots, skip, only, index_filename = 'TrainingFiles.txt'): # TODO: Clean .jpg from annotation here
         print('Building index...')
         paths = []
         categories = []
@@ -553,6 +557,7 @@ class GroceryProductsTestSet(tdata.Dataset):
         return path.join(self.image_dir, f'store{store}', 'images', f'store{store}_{image}.jpg')
     def build_index(self, ann_dir, only, skip):
         ann_file_re = re.compile(r'^s(\d+)_(\d+)\.csv$')
+        annotation_re = re.compile(r'^(.+)\.jpg')
         index = []
         for entry in os.scandir(ann_dir):
             if not entry.is_file(): continue
@@ -572,7 +577,10 @@ class GroceryProductsTestSet(tdata.Dataset):
                         print(f'Malformed annotation row in file {entry.name}: {row}; skipping')
                         continue
                     ann, x1, y1, x2, y2 = row
-                    anns.append(ann)
+                    ann_match = annotation_re.match(ann)
+                    if ann_match is None:
+                        print(f'Non-conforming annotation in file {entry.name}: {ann}; skipping')
+                    anns.append(ann_match.group(1))
                     boxes.append([int(coord) for coord in (x1, y1, x2, y2)])
 
             index.append({

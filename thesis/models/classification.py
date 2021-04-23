@@ -92,10 +92,7 @@ def nearest_neighbors(anchors, queries, k=1):
     query_indices = torch.arange(len(queries), device=queries.device)
     q_mesh, a_mesh = torch.meshgrid(query_indices, anchor_indices)
     distances = distance(anchors[a_mesh], queries[q_mesh], dim=-1)
-    if k == 1:
-        return distances.argmin(dim=-1)
-    else:
-        return distances.argsort(dim=-1)[:, :k]
+    return distances.argsort(dim=-1)[:, :k]
 
 def macvgg_embedder(model = 'vgg16_bn', pretrained = True, progress = True):
     model_to_config = {

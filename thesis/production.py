@@ -43,10 +43,7 @@ class Classifier:
             batch = utils.scale_to_tanh(images[i : i+self.batch_size].to(device=self.device))
             emb = self.encoder(batch)
             nearest = nearest_neighbors(self.embedding, emb, self.k)
-            if self.k == 1:
-                res += [self.annotations[j] for j in nearest]
-            else:
-                res += [[self.annotations[j] for j in n] for n in nearest]
+            res += [[self.annotations[j] for j in n] for n in nearest]
         return res
 
 class PlanogramComparator:

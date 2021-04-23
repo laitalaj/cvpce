@@ -247,7 +247,7 @@ def save_embedder_state(out, model, optimizer, iteration, epoch, best, distribut
 def evaluate_dihe(model, options, distributed, verbose = True):
     if distributed: model = model.module
     model.eval()
-    accuracy = classification_eval.eval_dihe(model, options.dataset, options.evalset, options.batch_size, options.num_workers, verbose=verbose)
+    accuracy = classification_eval.eval_dihe(model, options.dataset, options.evalset, options.batch_size, options.num_workers, verbose=verbose)[1]
     model.train()
     return accuracy
 
