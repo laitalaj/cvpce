@@ -188,6 +188,45 @@ class SKU110KDataset(tdata.Dataset):
                 + f' - You\'ll probably want to explicitly skip this! Returning image 0 ({self.index[0]["image_name"]}) instead.')
             return self[0]
 
+class GPBaselineDataset(tdata.Dataset):
+    def __init__(self, img_dir_path, annotation_file_path):
+        super().__init__()
+        self.index = self.build_index(img_dir_path, annotation_file_path)
+    def build_index(self, image_dir_path, annotation_file_path):
+        index = {}
+        image_re = re.compile(r'^(store\d)\_\d+.jpg$')
+        with open(annotation_file_path, 'r') as annotation_file:
+            annotation_reader = csv.reader(annotation_file)
+            for i, row in enumerate(annotation_reader):
+                if i == 0: continue
+                if len(row) != 6:
+                    print(f'Malformed annotation row: {row}, skipping')
+                    continue
+                name, x1, y1, x2, y2, _ = row
+
+                if name not in index:
+                    name_match = image_re.match(name)
+                    if name_match is None:
+                        print(f'Malformed annotation row: {row}, skipping')
+                        continue
+                    img_path = path.join(image_dir_path, name_match.group(1), 'images', name)
+                    index[name] = {'image_path': img_path, 'boxes': []}
+                
+                index[name]['boxes'].append(torch.tensor([int(coord) for coord in (x1, y1, x2, y2)]))
+
+        for val in index.values():
+            val['labels'] = torch.zeros(len(val['boxes']), dtype=torch.long)
+            val['boxes'] = torch.stack(val['boxes'])
+
+        return list(index.values())
+    def __len__(self):
+        return len(self.index)
+    def __getitem__(self, i):
+        index_entry = self.index[i]
+        img = pil.Image.open(index_entry['image_path'])
+        return ttf.to_tensor(img), index_entry
+                
+
 ## CLASSIFICATION ##
 
 CLASSIFICATION_IMAGE_SIZE = 256

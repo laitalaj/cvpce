@@ -53,6 +53,7 @@ GP_TRAIN_FOLDERS = (
 '''
 GP_TEST_DIR = utils.rel_path(*GP_ROOT, 'Testing')
 GP_ANN_DIR = utils.rel_path(*DATA_DIR, 'Planogram_Dataset', 'annotations')
+GP_BASELINE_ANN_FILE = utils.rel_path(*DATA_DIR, 'Baseline', 'Grocery_products_coco_gt_object.csv')
 GP_PLANO_DIR = utils.rel_path(*DATA_DIR, 'Planogram_Dataset', 'planograms')
 GP_TEST_VALIDATION_SET = ['s1_15.csv', 's2_3.csv', 's2_30.csv', 's2_143.csv', 's2_157.csv', 's3_111.csv', 's3_260.csv', 's5_55.csv']
 GP_TEST_VALIDATION_SET_SIZE = 2
@@ -143,6 +144,24 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, 
         utils.show(anns['gaussians'])
     if save_gaussians is not None:
         utils.save(anns['gaussians'], save_gaussians)
+
+@cli.command()
+@click.option(
+    '--imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=GP_BASELINE_ANN_FILE
+)
+def visualize_gp_baseline(imgs, annotations):
+    data = datautils.GPBaselineDataset(imgs, annotations)
+    img, anns = random.choice(data)
+    utils.show(img,
+        groundtruth=tvops.box_convert(anns['boxes'], 'xyxy', 'xywh')
+    )
 
 @cli.command()
 @click.option(
@@ -760,7 +779,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
         print()
 
 @cli.command()
-@click.option('--dataset', type=click.Choice(('sku110k', 'gp180')), default='sku110k')
+@click.option('--dataset', type=click.Choice(('sku110k', 'gp180', 'gpbaseline')), default='sku110k')
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
@@ -784,9 +803,11 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
 )
 def eval_gln(dataset, imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, plot_res_reduction, state_file):
     if dataset == 'sku110k':
-        dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False, flip_chance=0)
-    else:
+        dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False, flip_chance=0, short_anns=dataset == 'gpbaseline')
+    elif dataset == 'gp180':
         dataset = datautils.GroceryProductsTestSet(imgs, annotations, retinanet_annotations=True)
+    else:
+        dataset = datautils.GPBaselineDataset(imgs, annotations)
 
     thresholds = [f.item() for f in torch.linspace(.5, .95, 10)] if coco else iou_threshold
     evaluation = proposals_eval.evaluate_gln(state_file, dataset, thresholds=thresholds,
