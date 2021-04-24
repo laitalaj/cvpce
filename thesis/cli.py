@@ -803,7 +803,7 @@ def hyperopt_gln(imgs, annotations, eval_annotations, name, batch_size, dataload
 )
 def eval_gln(dataset, imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, plot_res_reduction, state_file):
     if dataset == 'sku110k':
-        dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False, flip_chance=0, short_anns=dataset == 'gpbaseline')
+        dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False, flip_chance=0)
     elif dataset == 'gp180':
         dataset = datautils.GroceryProductsTestSet(imgs, annotations, retinanet_annotations=True)
     else:
