@@ -989,7 +989,7 @@ def train_dihe(source_dir, source_type, only, target_imgs, target_annotations, e
     if source_type == 'gp':
         options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, include_masks=masks, only=only if len(only) else None)
     else:
-        options.dataset = datautils.InternalTrainSet(source_dir, include_annotations=True, include_masks=masks)
+        options.dataset = datautils.InternalTrainSet(source_dir[0], include_annotations=True, include_masks=masks)
         options.evaldata = datautils.GroceryProductsDataset(eval_data, include_annotations=True, include_masks=masks, only=only if len(only) else None)
     options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
     options.evalset = datautils.GroceryProductsTestSet(eval_imgs, eval_annotations, only=GP_TEST_VALIDATION_SET_SIZE)
