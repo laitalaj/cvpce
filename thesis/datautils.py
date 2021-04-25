@@ -413,7 +413,7 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
     def __getitem__(self, i):
         path = self.paths[i]
         img = pil.Image.open(path)
-        orig_shape = (len(img.getbands), img.width, img.height)
+        orig_shape = (len(img.getbands()), img.width, img.height)
 
         if self.random_crop:
             w_ratio = self.min_cropped_size + torch.rand(1) * (1 - self.min_cropped_size)
