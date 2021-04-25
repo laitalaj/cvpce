@@ -6,12 +6,12 @@ from torch.utils import data as tdata
 from . import metrics, datautils, utils
 from .models import proposals
 
-def load_gln(save_file, trim_module_prefix):
+def load_gln(save_file, trim_module_prefix, **kwargs):
     state = torch.load(save_file)
     state_dict = state['model_state_dict']
     if trim_module_prefix:
         state_dict = utils.trim_module_prefix(state_dict)
-    model = proposals.gln(pretrained_backbone=False).cuda()
+    model = proposals.gln(pretrained_backbone=False, **kwargs).cuda()
     model.load_state_dict(state_dict)
     model.eval()
     return model

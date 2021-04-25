@@ -551,6 +551,7 @@ class GroceryProductsTestSet(tdata.Dataset):
         self.tokeep = only if type(only) == int else 9999 # value larger than the max number of annotations in any image
 
         self.index = self.build_index(ann_dir, only = None if type(only) == int else only, skip = None if type(skip) == int else skip)
+        self.int_to_ann, self.ann_to_int = self.build_annotation_index()
 
         self.retinanet_annotations = retinanet_annotations
     def get_image_path(self, store, image):
@@ -591,6 +592,11 @@ class GroceryProductsTestSet(tdata.Dataset):
             })
         
         return index
+    def build_annotation_index(self):
+        annotation_set = set(ann for i in self.index for ann in i['anns'])
+        int_to_ann = list(annotation_set)
+        ann_to_int = {ann: i for i, ann in enumerate(int_to_ann)}
+        return int_to_ann, ann_to_int
     def get_index_for(self, store, image):
         target_path = self.get_image_path(store, image)
         for i, idx in enumerate(self.index):
@@ -603,7 +609,8 @@ class GroceryProductsTestSet(tdata.Dataset):
         index_entry = self.index[i]
         img = pil.Image.open(index_entry['path'])
         if self.retinanet_annotations:
-            return ttf.to_tensor(img), {'labels': torch.zeros_like(index_entry['boxes'][self.toskip:self.tokeep]), 'boxes': index_entry['boxes'][self.toskip:self.tokeep]} # TODO: Actual annotations here
+            labels = torch.tensor([self.ann_to_int[ann] for ann in index_entry['anns'][self.toskip:self.tokeep]], dtype=torch.long)
+            return ttf.to_tensor(img), {'labels': labels, 'boxes': index_entry['boxes'][self.toskip:self.tokeep]}
         else:
             return ttf.to_tensor(img), index_entry['anns'][self.toskip:self.tokeep], index_entry['boxes'][self.toskip:self.tokeep]
 

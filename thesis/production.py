@@ -17,10 +17,11 @@ class ProposalGenerator:
         return boxes, torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in boxes])
 
 class Classifier:
-    def __init__(self, encoder, sample_set, device=torch.device('cuda'), batch_size=32, num_workers=8, k=1):
+    def __init__(self, encoder, sample_set, device=torch.device('cuda'), emb_device=torch.device('cuda'), batch_size=32, num_workers=8, k=1):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.device = device
+        self.emb_device = emb_device
         self.k = k
 
         self.encoder = encoder
@@ -30,10 +31,10 @@ class Classifier:
         loader = DataLoader(sample_set,
             batch_size=self.batch_size, num_workers=self.num_workers,
             collate_fn=datautils.gp_annotated_collate_fn, pin_memory=True)
-        embedding = torch.empty((0, self.encoder.embedding_size), dtype=torch.float, device=self.device)
+        embedding = torch.empty((0, self.encoder.embedding_size), dtype=torch.float, device=self.emb_device)
         annotations = []
         for imgs, _, _, anns in loader:
-            emb = self.encoder(imgs.to(device=self.device))
+            emb = self.encoder(imgs.to(device=self.device)).detach().to(device=self.emb_device)
             embedding = torch.cat((embedding, emb))
             annotations += anns
         return embedding, annotations
@@ -41,7 +42,7 @@ class Classifier:
         res = []
         for i in range(0, len(images), self.batch_size):
             batch = utils.scale_to_tanh(images[i : i+self.batch_size].to(device=self.device))
-            emb = self.encoder(batch)
+            emb = self.encoder(batch).detach().to(device = self.emb_device)
             nearest = nearest_neighbors(self.embedding, emb, self.k)
             res += [[self.annotations[j] for j in n] for n in nearest]
         return res

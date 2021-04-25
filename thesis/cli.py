@@ -23,6 +23,7 @@ from . import datautils
 from . import utils
 from . import proposals_training, proposals_eval
 from . import classification_training, classification_eval
+from . import detection_eval
 from . import production
 from . import hyperopt
 from .models import proposals, classification
@@ -1111,6 +1112,58 @@ def eval_dihe(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm,
     encoder.eval()
 
     classification_eval.eval_dihe(encoder, sampleset, testset, batch_size, dataloader_workers, k=knn)
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
+    '--test-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option('--iou-threshold', '-t', type=float, multiple=True, default=(0.5,))
+@click.option('--coco/--no-coco', default=False)
+@click.argument('gln-state',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+@click.argument('dihe-state',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+def eval_product_detection(img_dir, test_imgs, annotations, iou_threshold, coco, gln_state, dihe_state):
+    sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+    testset = datautils.GroceryProductsTestSet(test_imgs, annotations, retinanet_annotations=True)
+
+    thresholds = [f.item() for f in torch.linspace(.5, .95, 10)] if coco else iou_threshold
+
+    proposal_generator = proposals_eval.load_gln(gln_state, False, detections_per_img=200)
+    proposal_generator.requires_grad_(False)
+
+    encoder = classification.macvgg_embedder(model='vgg16', pretrained=False).cuda()
+    enc_state = torch.load(dihe_state)
+    encoder.load_state_dict(enc_state[classification_training.EMBEDDER_STATE_DICT_KEY])
+    encoder.eval()
+    encoder.requires_grad_(False)
+    del enc_state
+
+    res = detection_eval.evaluate_detections(proposal_generator, encoder, testset, sampleset, thresholds=thresholds)
+    mam = detection_eval.mean_average_metrics(res, thresholds)
+    m_ap = 0
+    m_ar = 0
+    for t in thresholds:
+        print(t, mam[t])
+        m_ap += mam[t]['map']
+        m_ar += mam[t]['mar300']
+    print(f'--> mAP {m_ap / len(thresholds)}')
+    print(f'--> mAR300 {m_ar / len(thresholds)}')
 
 
 if __name__ == '__main__':
