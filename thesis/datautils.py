@@ -413,6 +413,7 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
     def __getitem__(self, i):
         path = self.paths[i]
         img = pil.Image.open(path)
+        orig_shape = (len(img.getbands), img.width, img.height)
 
         if self.random_crop:
             w_ratio = self.min_cropped_size + torch.rand(1) * (1 - self.min_cropped_size)
@@ -432,7 +433,7 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
             else:
                 return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i]
         except:
-            print(f'Malformed image: {self.categories[i]} / {self.annotations[i]}')
+            print(f'Malformed image: {orig_shape} / {self.categories[i]} / {self.annotations[i]}')
             raise
 
 class InternalTrainSet(GroceryProductsDataset):
