@@ -39,7 +39,7 @@ class ClassificationTrainingOptions:
         self.max_margin = 0.5
         self.enc_lr = 1e-6
 
-        self.enc_multiplier = 0.99
+        self.enc_multiplier = 1.0
 
         self.batchnorm = True
         self.masks = False
