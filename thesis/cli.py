@@ -1290,7 +1290,10 @@ def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, lo
     generator = production.ProposalGenerator(proposal_generator, confidence_threshold=0.5)
     classifier = production.Classifier(encoder, sampleset, batch_size=8, load=load_classifier_index)
 
-    image, plano = random.choice(planoset)
+    if datatype == 'gp':
+        image, _, _, plano = random.choice(planoset)
+    else:
+        image, plano = random.choice(planoset)
     boxes, images = generator.generate_proposals_and_images(image)
     classes = [ann[0] for ann in classifier.classify(images)]
 
@@ -1303,8 +1306,9 @@ def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, lo
     plt.show()
 
     boxes = plano['boxes']
+    labels = [l.split('.')[0] for l in plano['labels']] if datatype == 'gp' else plano['labels']
     maxy = boxes[:, 3].max().item()
-    utils.build_rebuild(boxes, plano['labels'], rebuildset, maxy)
+    utils.build_rebuild(boxes, labels, rebuildset, maxy)
     plt.xlim(boxes[:, 0].min().item(), boxes[:, 2].max().item())
     plt.ylim(0, maxy - boxes[:, 1].min().item())
     plt.show()

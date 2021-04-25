@@ -175,7 +175,8 @@ def build_rebuild(boxes, classes, imgset, maxy, ax = None):
         b = recall_tensor(b)
         img_idx = imgset.index_for_ann(c)
         if img_idx is None:
-            ax.add_patch(patches.Rectangle((b[0], b[1]), b[2] - b[0], b[3] - b[1]))
+            ax.add_patch(patches.Rectangle((b[0], maxy - b[3]), b[2] - b[0], b[3] - b[1], fc='none', ec='black'))
+            continue
 
         img, _, _, _ = imgset[img_idx]
         ax.imshow(
