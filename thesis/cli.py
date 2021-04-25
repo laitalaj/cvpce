@@ -5,6 +5,7 @@ import shutil
 from functools import partial
 
 import click
+import cv2
 import torch
 import torch.multiprocessing as mp
 import pycocotools.cocoeval as cocoeval
@@ -382,6 +383,21 @@ def visualize_internal_train(img_dir):
     print(ann)
     mask = utils.scale_from_tanh(gen_img[3])
     utils.show_multiple([utils.scale_from_tanh(img), utils.scale_from_tanh(gen_img[:3]), torch.stack((mask, mask, mask))])
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+)
+def iter_internal_train(img_dir):
+    data = datautils.InternalTrainSet(img_dir, include_annotations=True, include_masks=True)
+    for i in range(len(data)):
+        if i % 100 == 0:
+            print(i)
+        try:
+            data[i]
+        except cv2.error:
+            continue
 
 @cli.command()
 @click.option('--dir', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))

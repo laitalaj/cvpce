@@ -341,6 +341,8 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
                         hierarchies.append(current_hierarchy + [entry.name])
                     elif entry.is_file():
                         if entry.name in ('.DS_Store', 'index.txt', 'TrainingClassesIndex.mat', 'classes.csv', 'Thumbs.db'): continue
+                        if skip.match('/'.join(current_hierarchy + [entry.name])):
+                            continue
                         if test_can_load:
                             try:
                                 pil.Image.open(entry.path)
@@ -415,12 +417,16 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         return len(self.paths)
     def __getitem__(self, i):
         path = self.paths[i]
-        if self.open_with_hack:
-            img = cv2.imread(path, cv2.IMREAD_UNCHANGED if self.has_alpha else cv2.IMREAD_COLOR)
-            img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA if self.has_alpha else cv2.COLOR_BGR2RGB)
-            img = pil.Image.fromarray(img)
-        else:
-            img = pil.Image.open(path)
+        try:
+            if self.open_with_hack:
+                img = cv2.imread(path, cv2.IMREAD_UNCHANGED if self.has_alpha else cv2.IMREAD_COLOR)
+                img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA if self.has_alpha else cv2.COLOR_BGR2RGB)
+                img = pil.Image.fromarray(img)
+            else:
+                img = pil.Image.open(path)
+        except cv2.error:
+            print(f'Malformed image: {self.categories[i]} / {self.annotations[i]}')
+            raise
         orig_shape = (len(img.getbands()), img.width, img.height)
 
         if self.random_crop:
@@ -440,12 +446,14 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
                 return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i], self.annotations[i]
             else:
                 return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i]
-        except:
+        except IndexError:
             print(f'Malformed image: {orig_shape} / {self.categories[i]} / {self.annotations[i]}')
             raise
 
 class InternalTrainSet(GroceryProductsDataset):
-    def __init__(self, root, skip=[r'^Unknown.*$'], random_crop=True, resize=True, include_annotations = False, include_masks = False):
+    def __init__(self, root,
+    skip=[r'^Unknown.*$', r'^.*top/5029053527574.png$', r'^.*front/5708731039836.png$', r'^.*left/5701075202300.png$', r'^.*front/tray/5704080955858.png$'], # skip unknown hierarchies and images that libpng can't load
+    random_crop=True, resize=True, include_annotations = False, include_masks = False):
         super().__init__([root], skip=skip, random_crop=random_crop, resize=resize,
         include_annotations=include_annotations, include_masks=include_masks,
         has_alpha=True, open_with_hack=True)
