@@ -385,6 +385,10 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
             if a == ann:
                 return i
         return None
+    def build_mask(self, img):
+        return utils.build_mask(img)[None]
+    def postmask_hook(self, img):
+        return img
     def tensorize(self, img, tanh=False, mask=False):
         if not self.resize:
             return ttf.to_tensor(img)
@@ -395,8 +399,11 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         w, h = img.width, img.height
         img = ttf.to_tensor(img)
         if mask: # TODO: Consider doing this in advance instead of as a part of loading the images
-            m = utils.build_mask(img)[None]
+            m = self.build_mask(img)
             m = ttf.pad(m, (0, 0, CLASSIFICATION_IMAGE_SIZE - w, CLASSIFICATION_IMAGE_SIZE - h), fill=1)
+
+        img = self.postmask_hook(img)
+
         if tanh:
             img = utils.scale_to_tanh(img)
         img = ttf.pad(img, (0, 0, CLASSIFICATION_IMAGE_SIZE - w, CLASSIFICATION_IMAGE_SIZE - h), fill=0 if tanh else 0.5)
@@ -428,10 +435,17 @@ class InternalTrainSet(GroceryProductsDataset):
     def __init__(self, root, skip=[r'^Unknown.*$'], random_crop=True, resize=True, include_annotations = False, include_masks = False):
         super().__init__([root], skip=skip, random_crop=random_crop, resize=resize, include_annotations=include_annotations, include_masks=include_masks)
     def build_index(self, image_roots, skip, only, test_can_load):
-        ann_re = re.compile(r'^(.+/)*(\d+).png')
+        ann_re = re.compile(r'^(.+/)*(\d+)')
         paths, categories, annotations = super().build_index(image_roots, skip, only, test_can_load)
         annotations = [ann_re.match(ann).group(2) for ann in annotations]
         return paths, categories, annotations
+    def build_mask(self, img):
+        return (img[3] == 0)[None] # mask from alpha
+    def postmask_hook(self, img):
+        alpha_zero = img[3] == 0
+        for i in range(3):
+            img[i][alpha_zero] = 1 # set to white where alpha is zero
+        return img[:3] # discard alpha
 
 ## DETECTION ##
 

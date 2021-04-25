@@ -371,6 +371,19 @@ def fix_gp(source_dir, out_dir, dry_run):
     print('Done!')
 
 @cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+)
+def visualize_internal_train(img_dir):
+    data = datautils.InternalTrainSet(img_dir, include_annotations=True, include_masks=True)
+    img, gen_img, hier, ann = random.choice(data)
+    print(' - '.join(hier))
+    print(ann)
+    mask = utils.scale_from_tanh(gen_img[3])
+    utils.show_multiple([utils.scale_from_tanh(img), utils.scale_from_tanh(gen_img[:3]), torch.stack((mask, mask, mask))])
+
+@cli.command()
 @click.option('--dir', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
 def visualize_internal_planoset(dir):
     data = datautils.InternalPlanoSet(dir)
@@ -928,6 +941,7 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
     multiple=True,
     default=GP_TRAIN_FOLDERS
 )
+@click.option('--source-type', type=click.Choice(('gp', 'internal')), default='gp')
 @click.option('--only', type=str, multiple=True)
 @click.option(
     '--target-imgs',
@@ -950,6 +964,12 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
     default=GP_ANN_DIR
 )
 @click.option(
+    '--eval-data',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
     default=OUT_DIR
@@ -963,10 +983,14 @@ def pretrain_cls_gan(source_dir, target_imgs, target_annotations, out_dir, batch
 @click.option('--load-enc', default=None)
 @click.option('--gpus', type=int, default=1)
 @click.option('--hyperopt-params/--no-hyperopt-params', default=True)
-def train_dihe(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, out_dir, batch_norm, masks, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus, hyperopt_params):
+def train_dihe(source_dir, source_type, only, target_imgs, target_annotations, eval_imgs, eval_annotations, eval_data, out_dir, batch_norm, masks, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus, hyperopt_params):
     options = classification_training.ClassificationTrainingOptions()
 
-    options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, include_masks=masks, only=only if len(only) else None)
+    if source_type == 'gp':
+        options.dataset = datautils.GroceryProductsDataset(source_dir, include_annotations=True, include_masks=masks, only=only if len(only) else None)
+    else:
+        options.dataset = datautils.InternalTrainSet(source_dir, include_annotations=True, include_masks=masks)
+        options.evaldata = datautils.GroceryProductsDataset(eval_data, include_annotations=True, include_masks=masks, only=only if len(only) else None)
     options.discriminatorset = datautils.TargetDomainDataset(target_imgs, target_annotations, skip=SKU110K_SKIP)
     options.evalset = datautils.GroceryProductsTestSet(eval_imgs, eval_annotations, only=GP_TEST_VALIDATION_SET_SIZE)
 

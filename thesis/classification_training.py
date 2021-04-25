@@ -28,6 +28,7 @@ class ClassificationTrainingOptions:
     def __init__(self):
         self.dataset = None
         self.discriminatorset = None
+        self.evaldata = None
         self.evalset = None
         self.output_path = None
 
@@ -67,6 +68,8 @@ class ClassificationTrainingOptions:
         if not pretraining:
             assert self.load_gan is not None, 'DIHE training should have a pretrained GAN'
             assert self.evalset is not None, 'DIHE training should have a evaluation set'
+        if self.evaldata is None:
+            self.evaldata = self.dataset
 
 
 class DiscriminatorLoader:
@@ -247,7 +250,7 @@ def save_embedder_state(out, model, optimizer, iteration, epoch, best, distribut
 def evaluate_dihe(model, options, distributed, verbose = True):
     if distributed: model = model.module
     model.eval()
-    accuracy = classification_eval.eval_dihe(model, options.dataset, options.evalset, options.batch_size, options.num_workers, verbose=verbose)[1]
+    accuracy = classification_eval.eval_dihe(model, options.evaldata, options.evalset, options.batch_size, options.num_workers, verbose=verbose)[1]
     model.train()
     return accuracy
 
