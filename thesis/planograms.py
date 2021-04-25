@@ -178,7 +178,8 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
     boxes2 = b2[nodes2]
     points1 = torch.cat((boxes1[:, :2], boxes1[:, 2:]))
     points2 = torch.cat((boxes2[:, :2], boxes2[:, 2:]))
-    homography, _ = findHomography(points1.numpy(), points2.numpy(), RANSAC, reproj_threshold)
+    homography, inliers = findHomography(points1.numpy(), points2.numpy(), RANSAC, reproj_threshold)
+    print(f'Homography accuracy: {inliers.sum() / len(inliers)}')
     homography = torch.tensor(homography, dtype=torch.float)
 
     expected_positions = torch.stack(

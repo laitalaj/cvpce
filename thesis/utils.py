@@ -166,6 +166,23 @@ def draw_dataset_sample(test_imgs, test_boxes, test_labels, train_imgs, train_la
         build_fig(img, groundtruth=boxes, groundtruth_labels=labels, ax=ax)
     plt.show()
 
+def build_rebuild(boxes, classes, imgset, maxy, ax = None):
+    if ax is None:
+        plt.figure(figsize=(12, 9))
+        ax = plt.gca()
+
+    for b, c in zip(boxes, classes):
+        b = recall_tensor(b)
+        img_idx = imgset.index_for_ann(c)
+        if img_idx is None:
+            ax.add_patch(patches.Rectangle((b[0], b[1]), b[2] - b[0], b[3] - b[1]))
+
+        img, _, _, _ = imgset[img_idx]
+        ax.imshow(
+            img.numpy().transpose((1, 2, 0)), interpolation='bilinear',
+            origin='upper', extent=(b[0], b[2], maxy - b[3], maxy - b[1])
+        )
+
 def gp_distribution(dataset):
     res = {}
     leaf = {}

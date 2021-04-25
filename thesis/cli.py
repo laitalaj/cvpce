@@ -1160,6 +1160,38 @@ def eval_dihe(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm,
     multiple=True,
     default=GP_TRAIN_FOLDERS
 )
+@click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
+@click.option(
+    '--out-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
+    default=OUT_DIR
+)
+@click.argument('dihe-state',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+def prebuild_classifier_index(img_dir, datatype, out_dir, dihe_state):
+    if datatype == 'gp':
+        sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+    else:
+        sampleset = datautils.InternalTrainSet(img_dir[0], include_annotations=True)
+
+    encoder = classification.macvgg_embedder(model='vgg16', pretrained=False).cuda()
+    enc_state = torch.load(dihe_state)
+    encoder.load_state_dict(enc_state[classification_training.EMBEDDER_STATE_DICT_KEY])
+    encoder.eval()
+    encoder.requires_grad_(False)
+    del enc_state
+
+    classifier = production.Classifier(encoder, sampleset, verbose=True)
+    classifier.save_index(os.path.join(out_dir, 'classifier_index.pkl'))
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
 @click.option(
     '--test-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
@@ -1205,6 +1237,137 @@ def eval_product_detection(img_dir, test_imgs, annotations, iou_threshold, coco,
     print(f'--> mAP {m_ap / len(thresholds)}')
     print(f'--> mAR300 {m_ar / len(thresholds)}')
 
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
+    '--test-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--test-annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option(
+    '--planograms',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_PLANO_DIR
+)
+@click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
+@click.option('--load-classifier-index', type=click.Path())
+@click.argument('gln-state',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+@click.argument('dihe-state',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, load_classifier_index, gln_state, dihe_state):
+    if datatype == 'gp':
+        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planograms, only=GP_TEST_VALIDATION_SET)
+        sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+        rebuildset = datautils.GroceryProductsDataset(img_dir, include_annotations=True, resize=False)
+    else:
+        planoset = datautils.InternalPlanoSet(planograms)
+        sampleset = datautils.InternalTrainSet(img_dir[0], include_annotations=True)
+        rebuildset = datautils.InternalTrainSet(img_dir[0], include_annotations=True, resize=False)
+
+    proposal_generator = proposals_eval.load_gln(gln_state, False, detections_per_img=200)
+    proposal_generator.requires_grad_(False)
+
+    encoder = classification.macvgg_embedder(model='vgg16', pretrained=False).cuda()
+    enc_state = torch.load(dihe_state)
+    encoder.load_state_dict(enc_state[classification_training.EMBEDDER_STATE_DICT_KEY])
+    encoder.eval()
+    encoder.requires_grad_(False)
+    del enc_state
+
+    generator = production.ProposalGenerator(proposal_generator, confidence_threshold=0.5)
+    classifier = production.Classifier(encoder, sampleset, batch_size=8, load=load_classifier_index)
+
+    image, plano = random.choice(planoset)
+    boxes, images = generator.generate_proposals_and_images(image)
+    classes = [ann[0] for ann in classifier.classify(images)]
+
+    maxy = boxes[:, 3].max().item()
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 12)) if image.shape[2] < image.shape[1] else plt.subplots(2, 1, figsize=(12, 12))
+    utils.build_fig(image, detections=tvops.box_convert(boxes, 'xyxy', 'xywh'), ax=ax1)
+    utils.build_rebuild(boxes, classes, rebuildset, maxy, ax=ax2)
+    ax2.set_xlim(boxes[:, 0].min().item(), boxes[:, 2].max().item())
+    ax2.set_ylim(0, maxy - boxes[:, 1].min().item())
+    plt.show()
+
+    boxes = plano['boxes']
+    maxy = boxes[:, 3].max().item()
+    utils.build_rebuild(boxes, plano['labels'], rebuildset, maxy)
+    plt.xlim(boxes[:, 0].min().item(), boxes[:, 2].max().item())
+    plt.ylim(0, maxy - boxes[:, 1].min().item())
+    plt.show()
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
+@click.option(
+    '--test-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--test-annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option(
+    '--planograms',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_PLANO_DIR
+)
+@click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
+@click.option('--load-classifier-index', type=click.Path())
+@click.argument('gln-state',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+@click.argument('dihe-state',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+def eval_planograms(img_dir, test_imgs, test_annotations, planograms, datatype, load_classifier_index, gln_state, dihe_state):
+    if datatype == 'gp':
+        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planograms, only=GP_TEST_VALIDATION_SET)
+        sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+    else:
+        planoset = datautils.InternalPlanoSet(planograms)
+        sampleset = datautils.InternalTrainSet(img_dir[0], include_annotations=True)
+
+    proposal_generator = proposals_eval.load_gln(gln_state, False)
+    proposal_generator.requires_grad_(False)
+
+    encoder = classification.macvgg_embedder(model='vgg16', pretrained=False).cuda()
+    enc_state = torch.load(dihe_state)
+    encoder.load_state_dict(enc_state[classification_training.EMBEDDER_STATE_DICT_KEY])
+    encoder.eval()
+    encoder.requires_grad_(False)
+    del enc_state
+
+    generator = production.ProposalGenerator(proposal_generator)
+    classifier = production.Classifier(encoder, sampleset, batch_size=8, load=load_classifier_index)
+    comparator = production.PlanogramComparator()
+
+    evaluator = production.PlanogramEvaluator(generator, classifier, comparator)
+    total = 0
+    for img, plano in planoset:
+        acc =  evaluator.evaluate(img, plano)
+        print('Planogram accuracy', acc)
+        total += acc
+    print(total / len(planoset))
 
 if __name__ == '__main__':
     cli()

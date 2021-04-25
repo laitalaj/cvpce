@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
+from torchvision import ops as tvops
 
 from . import datautils, planograms, utils
 from .models.classification import nearest_neighbors
@@ -14,10 +15,10 @@ class ProposalGenerator:
         return res['boxes'][res['scores'] > self.condfidence_threshold]
     def generate_proposals_and_images(self, image):
         boxes = self.generate_proposals(image)
-        return boxes, torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in boxes])
+        return boxes, torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in boxes.to(dtype=torch.long)])
 
 class Classifier:
-    def __init__(self, encoder, sample_set, device=torch.device('cuda'), emb_device=torch.device('cuda'), batch_size=32, num_workers=8, k=1):
+    def __init__(self, encoder, sample_set, device=torch.device('cuda'), emb_device=torch.device('cuda'), batch_size=32, num_workers=8, k=1, load=None, verbose=False):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.device = device
@@ -26,18 +27,31 @@ class Classifier:
 
         self.encoder = encoder
 
-        self.embedding, self.annotations = self.build_index(sample_set)
-    def build_index(self, sample_set):
+        if load is None:
+            self.embedding, self.annotations = self.build_index(sample_set, verbose)
+        else:
+            self.embedding, self.annotations = self.load_index(load)
+    def build_index(self, sample_set, verbose=False):
         loader = DataLoader(sample_set,
             batch_size=self.batch_size, num_workers=self.num_workers,
             collate_fn=datautils.gp_annotated_collate_fn, pin_memory=True)
         embedding = torch.empty((0, self.encoder.embedding_size), dtype=torch.float, device=self.emb_device)
         annotations = []
-        for imgs, _, _, anns in loader:
+        for i, (imgs, _, _, anns) in enumerate(loader):
+            if verbose and i % 100 == 0:
+                print(i)
             emb = self.encoder(imgs.to(device=self.device)).detach().to(device=self.emb_device)
             embedding = torch.cat((embedding, emb))
             annotations += anns
         return embedding, annotations
+    def save_index(self, pth):
+        torch.save({
+            'embedding': self.embedding,
+            'annotations': self.annotations,
+        }, pth)
+    def load_index(self, pth):
+        idx = torch.load(pth)
+        return idx['embedding'], idx['annotations']
     def classify(self, images):
         res = []
         for i in range(0, len(images), self.batch_size):
@@ -51,15 +65,28 @@ class PlanogramComparator:
     def __init__(self, graph_threshold = 0.5):
         self.graph_threshold = graph_threshold
     def compare(self, expected, actual, image=None, classifier=None):
+        if image is None:
+            reproj_threshold = 10
+        else:
+            h, w = image.shape[1:]
+            reproj_threshold = max(h, w) * 0.01
+
         ge = expected['graph'] if 'graph' in expected else planograms.build_graph(expected['boxes'], expected['labels'], self.graph_threshold)
         ga = planograms.build_graph(actual['boxes'], actual['labels'], self.graph_threshold)
         matching = planograms.large_common_subgraph(ge, ga) # TODO: Possibility to use Tonioni
         found, missing_indices, missing_positions, missing_labels = planograms.finalize_via_ransac(
-            matching, expected['boxes'], actual['boxes'], expected['labels'], actual['labels']
+            matching, expected['boxes'], actual['boxes'], expected['labels'], actual['labels'],
+            reproj_threshold=reproj_threshold,
         )
 
         if classifier is not None and image is not None:
-            missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions])
+            missing_positions = tvops.clip_boxes_to_image(missing_positions, image.shape[1:])
+            valid_positions = (missing_positions[:,2] - missing_positions[:,0] > 1) & (missing_positions[:,3] - missing_positions[:,1] > 1)
+            missing_indices = missing_indices[valid_positions]
+            missing_positions = missing_positions[valid_positions]
+            missing_labels = [l for l, v in zip(missing_labels, valid_positions) if v]
+
+            missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions.to(dtype=torch.long)])
             reclass_labels = classifier.classify(missing_imgs)
             for idx, expected_label, actual_label in zip(missing_indices, missing_labels, reclass_labels):
                 if expected_label == actual_label:
@@ -73,6 +100,8 @@ class PlanogramEvaluator:
         self.planogram_comparator = planogram_comparator
     def evaluate(self, image, planogram):
         boxes, images = self.proposal_generator.generate_proposals_and_images(image)
-        classes = self.classifier.classify(images)
-        compliance = self.planogram_comparator.compare(planogram, {'boxes': boxes, 'labels': classes}, image, self.classifier)
+        classes = [ann[0] for ann in self.classifier.classify(images)]
+        compliance = self.planogram_comparator.compare(planogram,
+            {'boxes': boxes.detach().cpu(), 'labels': classes},
+            image, self.classifier)
         return compliance

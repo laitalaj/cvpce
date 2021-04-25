@@ -462,6 +462,17 @@ class InternalTrainSet(GroceryProductsDataset):
         paths, categories, annotations = super().build_index(image_roots, skip, only, test_can_load)
         annotations = [ann_re.match(ann).group(2) for ann in annotations]
         return paths, categories, annotations
+    def index_for_ann(self, ann):
+        candidate = None
+        for i, a in enumerate(self.annotations):
+            if a == ann:
+                if 'front' in self.categories[i]: # immediately return front
+                    return i
+                elif 'back' in self.categories[i]: # prefer back over sides/top and bottom
+                    candidate = i
+                elif candidate is None: # settle for any if can't find something else
+                    candidate = i
+        return candidate
     def build_mask(self, img):
         return (img[3] == 0)[None] # mask from alpha
     def postmask_hook(self, img):
@@ -687,6 +698,12 @@ class InternalPlanoSet(tdata.Dataset):
                 plano = json.load(plano_file)
             anns = [e['code'] for e in plano]
             boxes = torch.tensor([e['box'] for e in plano], dtype=torch.float)
+
+            maxy = boxes[:, 3].max() # Flip the boxes to comply with GLN coordinates
+            temp = maxy - boxes[:, 3]
+            boxes[:, 3] = maxy - boxes[:, 1]
+            boxes[:, 1] = temp
+
             res.append({
                 'img': img_path,
                 'anns': anns,
