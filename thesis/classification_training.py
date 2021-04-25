@@ -142,7 +142,7 @@ def loaders_and_test_images(gpu, options):
     # might take it into use later though
     disc_loader = DiscriminatorLoader(options)
 
-    test_images, gen_test_images = zip(*[options.dataset[img_index % len(options.dataset)][:2] for img_index in options.sample_indices])
+    test_images, gen_test_images = zip(*[options.evaldata[img_index % len(options.evaldata)][:2] for img_index in options.sample_indices])
     test_images = torch.stack(test_images)
     gen_test_images = torch.stack(gen_test_images)
 
