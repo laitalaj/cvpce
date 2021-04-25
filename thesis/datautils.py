@@ -301,7 +301,8 @@ def gp_annotated_collate_fn(samples):
 class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
     def __init__(self, image_roots, skip=[r'^Background.*$', r'^.*/[Oo]riginals?$'], only=None,
         random_crop = True, min_cropped_size = 0.8, resize=True,
-        test_can_load = False, include_annotations = False, include_masks = False, index_from_file = False):
+        test_can_load = False, include_annotations = False, include_masks = False, index_from_file = False,
+        has_alpha = False, open_with_hack = False):
         super().__init__()
 
         skip = re.compile('|'.join(f'({s})' for s in skip))
@@ -314,6 +315,8 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         self.min_cropped_size = min_cropped_size
         self.include_annotations = include_annotations
         self.include_masks = include_masks
+        self.has_alpha = has_alpha
+        self.open_with_hack = open_with_hack
     def build_index(self, image_roots, skip, only, test_can_load):
         print('Building index...')
         annotation_re = re.compile(r'^(.+)\.\w+$')
@@ -412,7 +415,12 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         return len(self.paths)
     def __getitem__(self, i):
         path = self.paths[i]
-        img = pil.Image.open(path)
+        if self.open_with_hack:
+            img = cv2.imread(path, cv2.IMREAD_UNCHANGED if self.has_alpha else cv2.IMREAD_COLOR)
+            img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA if self.has_alpha else cv2.COLOR_BGR2RGB)
+            img = pil.Image.fromarray(img)
+        else:
+            img = pil.Image.open(path)
         orig_shape = (len(img.getbands()), img.width, img.height)
 
         if self.random_crop:
@@ -438,7 +446,9 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
 
 class InternalTrainSet(GroceryProductsDataset):
     def __init__(self, root, skip=[r'^Unknown.*$'], random_crop=True, resize=True, include_annotations = False, include_masks = False):
-        super().__init__([root], skip=skip, random_crop=random_crop, resize=resize, include_annotations=include_annotations, include_masks=include_masks)
+        super().__init__([root], skip=skip, random_crop=random_crop, resize=resize,
+        include_annotations=include_annotations, include_masks=include_masks,
+        has_alpha=True, open_with_hack=True)
     def build_index(self, image_roots, skip, only, test_can_load):
         ann_re = re.compile(r'^(.+/)*(\d+)')
         paths, categories, annotations = super().build_index(image_roots, skip, only, test_can_load)
