@@ -426,10 +426,14 @@ class GroceryProductsDataset(tdata.Dataset): # TODO: Clean this one up a bunch
         else:
             gen_img = img
 
-        if self.include_annotations:
-            return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i], self.annotations[i]
-        else:
-            return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i]
+        try:
+            if self.include_annotations:
+                return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i], self.annotations[i]
+            else:
+                return self.tensorize(img, True), self.tensorize(gen_img, True, self.include_masks), self.categories[i]
+        except:
+            print(f'Malformed image: {self.categories[i]} / {self.annotations[i]}')
+            raise
 
 class InternalTrainSet(GroceryProductsDataset):
     def __init__(self, root, skip=[r'^Unknown.*$'], random_crop=True, resize=True, include_annotations = False, include_masks = False):
