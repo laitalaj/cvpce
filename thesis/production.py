@@ -69,7 +69,7 @@ class PlanogramComparator:
             reproj_threshold = 10
         else:
             h, w = image.shape[1:]
-            reproj_threshold = max(h, w) * 0.01
+            reproj_threshold = max(h, w) * 0.005
 
         ge = expected['graph'] if 'graph' in expected else planograms.build_graph(expected['boxes'], expected['labels'], self.graph_threshold)
         ga = planograms.build_graph(actual['boxes'], actual['labels'], self.graph_threshold)
@@ -80,6 +80,8 @@ class PlanogramComparator:
         )
 
         if classifier is not None and image is not None:
+            before_reclass = found.sum()
+
             missing_positions = tvops.clip_boxes_to_image(missing_positions, image.shape[1:])
             valid_positions = (missing_positions[:,2] - missing_positions[:,0] > 1) & (missing_positions[:,3] - missing_positions[:,1] > 1)
             missing_indices = missing_indices[valid_positions]
@@ -89,8 +91,11 @@ class PlanogramComparator:
             missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions.to(dtype=torch.long)])
             reclass_labels = classifier.classify(missing_imgs)
             for idx, expected_label, actual_label in zip(missing_indices, missing_labels, reclass_labels):
-                if expected_label == actual_label:
+                if expected_label == actual_label[0]:
                     found[idx] = True
+
+            after_reclass = found.sum()
+            print(f'{after_reclass - before_reclass} products confirmed by reclassification round!')
         return found.sum() / len(found) # TODO: Also return which were actually missing
 
 class PlanogramEvaluator:

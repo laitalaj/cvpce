@@ -14,6 +14,7 @@ import matplotlib.patheffects as effects
 import squarify
 from skimage.segmentation import flood
 from skimage.filters import sobel
+import networkx as nx
 
 from .models.classification import nearest_neighbors
 
@@ -143,6 +144,7 @@ def draw_planogram(boxes, labels, ax = None, xlim = None, ylim = None):
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
     ax.set_aspect('equal')
+    ax.invert_yaxis()
 
     box_patches = [patches.Rectangle((x1, y1), x2 - x1, y2 - y1) for x1, y1, x2, y2 in boxes]
     box_collection = pltcollections.PatchCollection(box_patches, facecolor='none', edgecolor='black')
@@ -151,6 +153,16 @@ def draw_planogram(boxes, labels, ax = None, xlim = None, ylim = None):
         x = (x1 + x2) / 2
         y = (y1 + y2) / 2
         ax.text(x, y, label, ha='center', va='center')
+
+def draw_planograph(g, boxes, ax = None, flip_y = False):
+    if ax is None:
+        plt.figure(figsize=(12, 9))
+        ax = plt.gca()
+
+    maxy = boxes[:, 3].max().item()
+
+    centres = torch.tensor([[(x1 + x2) / 2, maxy - (y1 + y2) / 2 if flip_y else (y1 + y2) / 2] for x1, y1, x2, y2 in boxes])
+    nx.draw(g, pos={i: (x.item(), y.item()) for i, (x, y) in enumerate(centres)}, ax=ax, node_size=100)
 
 def draw_dataset_sample(test_imgs, test_boxes, test_labels, train_imgs, train_labels, figsize = (5, 5)):
     fig = plt.figure(figsize=figsize)
@@ -166,10 +178,13 @@ def draw_dataset_sample(test_imgs, test_boxes, test_labels, train_imgs, train_la
         build_fig(img, groundtruth=boxes, groundtruth_labels=labels, ax=ax)
     plt.show()
 
-def build_rebuild(boxes, classes, imgset, maxy, ax = None):
+def build_rebuild(boxes, classes, imgset, maxy=None, ax = None): # TODO: Use invert_yaxis here
     if ax is None:
         plt.figure(figsize=(12, 9))
         ax = plt.gca()
+
+    if maxy is None:
+        maxy = boxes[:, 3].max().item()
 
     for b, c in zip(boxes, classes):
         b = recall_tensor(b)
@@ -183,6 +198,10 @@ def build_rebuild(boxes, classes, imgset, maxy, ax = None):
             img.numpy().transpose((1, 2, 0)), interpolation='bilinear',
             origin='upper', extent=(b[0], b[2], maxy - b[3], maxy - b[1])
         )
+
+    ax.set_xlim(boxes[:, 0].min().item(), boxes[:, 2].max().item())
+    ax.set_ylim(0, maxy - boxes[:, 1].min().item())
+    ax.set_axis_off()
 
 def gp_distribution(dataset):
     res = {}

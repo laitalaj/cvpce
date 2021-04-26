@@ -172,12 +172,14 @@ def _project(homography, x, y):
     res = torch.matmul(homography, torch.tensor([x, y, 1], dtype=torch.float))
     return res[:2] / res[2]
 
-def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_threshold = 0.5):
+def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_threshold = 0.5, return_matched_actual=False):
     nodes1, nodes2 = (list(l) for l in zip(*solution))
     boxes1 = b1[nodes1]
     boxes2 = b2[nodes2]
-    points1 = torch.cat((boxes1[:, :2], boxes1[:, 2:]))
-    points2 = torch.cat((boxes2[:, :2], boxes2[:, 2:]))
+    centres1 = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in boxes1])
+    centres2 = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in boxes2])
+    points1 = torch.cat((boxes1[:, :2], boxes1[:, 2:], centres1))
+    points2 = torch.cat((boxes2[:, :2], boxes2[:, 2:], centres2))
     homography, inliers = findHomography(points1.numpy(), points2.numpy(), RANSAC, reproj_threshold)
     print(f'Homography accuracy: {inliers.sum() / len(inliers)}')
     homography = torch.tensor(homography, dtype=torch.float)
@@ -188,6 +190,7 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
 
     l1, l2, key = utils.labels_to_tensors(l1, l2)
     matched_expected = torch.full((len(expected_positions),), False)
+    matched_actual = torch.full((len(b2),), False)
 
     for lbl in range(len(key)): # Find expected w/ matching detections
         expected_indices = l1 == lbl
@@ -196,6 +199,7 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
 
         b2_indices = l2 == lbl
         matched_b2 = torch.full((b2_indices.sum(),), False)
+        reverse_b2 = torch.where(b2_indices)[0]
         if len(matched_b2) == 0: continue
 
         lbl_ious = tvops.box_iou(expected_positions[expected_indices, :], b2[b2_indices, :])
@@ -206,8 +210,12 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
                 if matched_b2[idx]: continue # TODO: We could match with the best instead of with the first
                 matched_b2[idx] = True
                 matched_expected[reverse_expected[i]] = True
+                matched_actual[reverse_b2[idx]] = True
 
     missing_expected = torch.where(matched_expected == False)[0]
     missing_positions = expected_positions[missing_expected]
-    missing_labels = utils.tensors_to_labels(key, l1[missing_expected])
-    return matched_expected, missing_expected, missing_positions, missing_labels
+    missing_labels = utils.tensors_to_labels(key, l1[missing_expected])[0]
+    if return_matched_actual:
+        return matched_expected, matched_actual, missing_expected, missing_positions, missing_labels
+    else:
+        return matched_expected, missing_expected, missing_positions, missing_labels
