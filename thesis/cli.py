@@ -1409,7 +1409,7 @@ def eval_planograms(img_dir, test_imgs, test_annotations, planograms, datatype, 
 )
 def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, load_classifier_index, gln_state, dihe_state):
     if datatype == 'gp':
-        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planos, only=GP_TEST_VALIDATION_SET)
+        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planos)
         sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
         rebuildset = datautils.GroceryProductsDataset(img_dir, include_annotations=True, resize=False)
     else:
@@ -1457,13 +1457,16 @@ def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, 
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 12)) if image.shape[2] < image.shape[1] else plt.subplots(2, 1, figsize=(12, 12))
     matching = planograms.large_common_subgraph(ge, ga)
-    nodes_e, nodes_a = (list(l) for l in zip(*matching))
+    nodes_e, nodes_a = (list(l) for l in zip(*matching)) if len(matching) else ([],[])
     sge = ge.subgraph(nodes_e)
     sga = ga.subgraph(nodes_a)
     utils.build_rebuild(expected['boxes'], expected['labels'], rebuildset, ax=ax1)
     utils.draw_planograph(sge, expected['boxes'], ax=ax1, flip_y=True)
     utils.build_fig(image, ax=ax2)
     utils.draw_planograph(sga, actual['boxes'], ax=ax2)
+    if not len(matching):
+        plt.show()
+        return
 
     # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 12)) if image.shape[2] < image.shape[1] else plt.subplots(2, 1, figsize=(12, 12))
     found, found_actual, missing_indices, missing_positions, missing_labels = planograms.finalize_via_ransac(
@@ -1476,17 +1479,18 @@ def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, 
     missing_positions = missing_positions[valid_positions]
     missing_labels = [l for l, v in zip(missing_labels, valid_positions) if v]
 
-    found_round2 = torch.full((len(missing_indices),), False)
-    missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions.to(dtype=torch.long)])
-    reclass_labels = classifier.classify(missing_imgs)
-    for idx, (expected_label, actual_label) in enumerate(zip(missing_labels, reclass_labels)):
-        if expected_label == actual_label[0]:
-            found_round2[idx] = True
+    if len(missing_positions) > 0:
+        found_round2 = torch.full((len(missing_indices),), False)
+        missing_imgs = torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in missing_positions.to(dtype=torch.long)])
+        reclass_labels = classifier.classify(missing_imgs)
+        for idx, (expected_label, actual_label) in enumerate(zip(missing_labels, reclass_labels)):
+            if expected_label == actual_label[0]:
+                found_round2[idx] = True
     utils.build_fig(image,
         groundtruth=tvops.box_convert(actual['boxes'][found_actual], 'xyxy', 'xywh'),
         detections=tvops.box_convert(missing_positions, 'xyxy', 'xywh'),
     )
-    utils.plot_boxes(tvops.box_convert(missing_positions[found_round2], 'xyxy', 'xywh'), color='yellow', hl_color='orange')
+    if len(missing_positions) > 0: utils.plot_boxes(tvops.box_convert(missing_positions[found_round2], 'xyxy', 'xywh'), color='yellow', hl_color='orange')
 
     plt.show()
 

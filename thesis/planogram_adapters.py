@@ -6,6 +6,14 @@ import networkx as nx
 def _get_object(planogram, graph, node):
     return planogram['objects'][graph.nodes[node]['ogg']]
 
+def _process_dir(d): # Flip for compliance w/ detections
+    res = d.upper()
+    if 'N' in res:
+        return res.replace('N', 'S')
+    if 'S' in res:
+        return res.replace('S', 'N')
+    return res
+
 def read_tonioni_planogram(planogram_path):
     with open(planogram_path, 'r') as planogram_file:
         planogram = json.load(planogram_file)
@@ -15,10 +23,10 @@ def read_tonioni_planogram(planogram_path):
     southern_nodes = set()
     for i, entry in enumerate(planogram['graph']):
         g.add_node(i, ogg=entry['ogg'])
-        g.add_edges_from((i, j, {'dir': k.upper()}) for k, j in entry.items() if j >= 0 and k != 'ogg')
+        g.add_edges_from((i, j, {'dir': _process_dir(k)}) for k, j in entry.items() if j >= 0 and k != 'ogg')
         if entry['w'] == -1:
             western_nodes.add(i)
-        if entry['s'] == -1:
+        if entry['n'] == -1: # Flip for compliance w/ detections, TODO: clean this stuff up a bit
             southern_nodes.add(i)
 
     rows = {w: [] for w in western_nodes}
@@ -97,9 +105,9 @@ def read_tonioni_planogram(planogram_path):
     for n, node in g.nodes.items():
         obj = _get_object(planogram, g, n)
         x1 = col_x[node['col']]
-        y1 = row_y[node['row']]
+        y1 = row_y[node['row']] - obj['height']
         x2 = x1 + obj['width']
-        y2 = y1 + obj['height']
+        y2 = row_y[node['row']]
         node['pos'] = (x1, y1, x2, y2)
 
     node_range = range(len(planogram['graph']))
@@ -108,7 +116,7 @@ def read_tonioni_planogram(planogram_path):
         label = _get_object(planogram, g, i)['img_path']
         #label = f'{g.nodes[i]["row"]}/{g.nodes[i]["col"]}'
         del g.nodes[i]['pos'], g.nodes[i]['row'], g.nodes[i]['col'], g.nodes[i]['ogg']
-        g.nodes[i]['label'] = label
+        g.nodes[i]['label'] = label.split('.')[0]
     labels = [g.nodes[i]['label'] for i in node_range]
 
     return boxes, labels, g
