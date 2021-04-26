@@ -1205,13 +1205,14 @@ def prebuild_classifier_index(img_dir, datatype, out_dir, dihe_state):
 )
 @click.option('--iou-threshold', '-t', type=float, multiple=True, default=(0.5,))
 @click.option('--coco/--no-coco', default=False)
+@click.option('--load-classifier-index', type=click.Path())
 @click.argument('gln-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
 @click.argument('dihe-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
-def eval_product_detection(img_dir, test_imgs, annotations, iou_threshold, coco, gln_state, dihe_state):
+def eval_product_detection(img_dir, test_imgs, annotations, iou_threshold, coco, load_classifier_index, gln_state, dihe_state):
     sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
     testset = datautils.GroceryProductsTestSet(test_imgs, annotations, retinanet_annotations=True)
 
@@ -1227,11 +1228,13 @@ def eval_product_detection(img_dir, test_imgs, annotations, iou_threshold, coco,
     encoder.requires_grad_(False)
     del enc_state
 
-    res = detection_eval.evaluate_detections(proposal_generator, encoder, testset, sampleset, thresholds=thresholds)
+    res, all_res = detection_eval.evaluate_detections(proposal_generator, encoder, testset, sampleset, thresholds=thresholds, load_classifier_index=load_classifier_index)
+
     mam = detection_eval.mean_average_metrics(res, thresholds)
     m_ap = 0
     m_ar = 0
     for t in thresholds:
+        print(t, all_res[t])
         print(t, mam[t])
         m_ap += mam[t]['map']
         m_ar += mam[t]['mar300']
