@@ -110,7 +110,7 @@ def large_common_subgraph(g1, g2, edge_label = 'dir', min_score = -0.2, stop_at_
     best = set()
     stop_at = min(len(g1), len(g2)) * stop_at_fraction
     for (s, n1, n2) in hypotheses:
-        if s > min_score:
+        if s > min_score and len(best):
             return best
         to_check = _get_next(g1, g2, n1, n2, edge_label)
         current = {(n1, n2)}
@@ -172,7 +172,7 @@ def _project(homography, x, y):
     res = torch.matmul(homography, torch.tensor([x, y, 1], dtype=torch.float))
     return res[:2] / res[2]
 
-def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_threshold = 0.5, return_matched_actual=False):
+def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_threshold = 0.5, return_matched_actual=False, report_accuracy=False):
     nodes1, nodes2 = (list(l) for l in zip(*solution))
     boxes1 = b1[nodes1]
     boxes2 = b2[nodes2]
@@ -180,8 +180,14 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
     centres2 = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in boxes2])
     points1 = torch.cat((boxes1[:, :2], boxes1[:, 2:], centres1))
     points2 = torch.cat((boxes2[:, :2], boxes2[:, 2:], centres2))
+    if len(solution) < 2: # Too few points --> add some more (however, always adding these makes the homography perform worse)
+        points1 = torch.cat((points1, boxes1[:, (2, 1)], boxes1[:, (0, 3)]))
+        points2 = torch.cat((points2, boxes2[:, (2, 1)], boxes2[:, (0, 3)]))
     homography, inliers = findHomography(points1.numpy(), points2.numpy(), RANSAC, reproj_threshold)
-    print(f'Homography accuracy: {inliers.sum() / len(inliers)}')
+    if report_accuracy:
+        print(f'Homography accuracy: {inliers.sum() / len(inliers)}')
+    if homography is None: # Happens with GP sometimes for some reason
+        return (None,) * 5 if return_matched_actual else (None,) * 4
     homography = torch.tensor(homography, dtype=torch.float)
 
     expected_positions = torch.stack(

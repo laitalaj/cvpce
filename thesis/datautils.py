@@ -675,7 +675,7 @@ class PlanogramTestSet(GroceryProductsTestSet):
             plano_path = path.join(self.plano_dir, f's{s}_{i}.json')
             boxes, labels, g = planogram_adapters.read_tonioni_planogram(plano_path)
             entry['plano'] = {
-                'boxes': boxes, 'labels': labels, 'graph': g,
+                'boxes': boxes, 'labels': labels, 'graph': g, 'actual_accuracy': 1.0
             } 
         return index
     def __getitem__(self, i):
@@ -708,6 +708,7 @@ class InternalPlanoSet(tdata.Dataset):
                 'img': img_path,
                 'anns': anns,
                 'boxes': boxes,
+                'actual_accuracy': obj['correct']/obj['facings'],
             })
         
         return res
@@ -716,4 +717,4 @@ class InternalPlanoSet(tdata.Dataset):
     def __getitem__(self, i):
         index_entry = self.index[i]
         img = pil.Image.open(index_entry['img'])
-        return ttf.to_tensor(img), {'labels': index_entry['anns'], 'boxes': index_entry['boxes']}
+        return ttf.to_tensor(img), {'labels': index_entry['anns'], 'boxes': index_entry['boxes'], 'actual_accuracy': index_entry['actual_accuracy']}

@@ -15,6 +15,8 @@ class ProposalGenerator:
         return res['boxes'][res['scores'] > self.condfidence_threshold]
     def generate_proposals_and_images(self, image):
         boxes = self.generate_proposals(image)
+        if not len(boxes):
+            return boxes, torch.empty((0, 3, datautils.CLASSIFICATION_IMAGE_SIZE, datautils.CLASSIFICATION_IMAGE_SIZE))
         return boxes, torch.stack([datautils.resize_for_classification(image[:, y1:y2, x1:x2]) for x1, y1, x2, y2 in boxes.to(dtype=torch.long)])
 
 class Classifier:
@@ -69,21 +71,29 @@ class PlanogramComparator:
             reproj_threshold = 10
         else:
             h, w = image.shape[1:]
-            reproj_threshold = max(h, w) * 0.005
+            reproj_threshold = min(h, w) * 0.01
+
+        if not len(actual['boxes']):
+            return 0 if len(expected['boxes']) else 1
 
         ge = expected['graph'] if 'graph' in expected else planograms.build_graph(expected['boxes'], expected['labels'], self.graph_threshold)
         ga = planograms.build_graph(actual['boxes'], actual['labels'], self.graph_threshold)
         matching = planograms.large_common_subgraph(ge, ga) # TODO: Possibility to use Tonioni
+        if not len(matching):
+            return 0
         found, missing_indices, missing_positions, missing_labels = planograms.finalize_via_ransac(
             matching, expected['boxes'], actual['boxes'], expected['labels'], actual['labels'],
             reproj_threshold=reproj_threshold,
         )
+        if found is None: # --> couldn't calculate homography
+            return len(matching) / len(expected['boxes'])
 
-        if classifier is not None and image is not None:
-            before_reclass = found.sum()
-
+        if classifier is not None and image is not None and len(missing_positions):
             missing_positions = tvops.clip_boxes_to_image(missing_positions, image.shape[1:])
             valid_positions = (missing_positions[:,2] - missing_positions[:,0] > 1) & (missing_positions[:,3] - missing_positions[:,1] > 1)
+            if not valid_positions.any():
+                return found.sum() / len(found) # TODO: Also return which were actually missing
+
             missing_indices = missing_indices[valid_positions]
             missing_positions = missing_positions[valid_positions]
             missing_labels = [l for l, v in zip(missing_labels, valid_positions) if v]
@@ -93,9 +103,6 @@ class PlanogramComparator:
             for idx, expected_label, actual_label in zip(missing_indices, missing_labels, reclass_labels):
                 if expected_label == actual_label[0]:
                     found[idx] = True
-
-            after_reclass = found.sum()
-            print(f'{after_reclass - before_reclass} products confirmed by reclassification round!')
         return found.sum() / len(found) # TODO: Also return which were actually missing
 
 class PlanogramEvaluator:

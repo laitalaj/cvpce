@@ -1265,13 +1265,14 @@ def eval_product_detection(img_dir, test_imgs, annotations, iou_threshold, coco,
 )
 @click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
 @click.option('--load-classifier-index', type=click.Path())
+@click.option('--plano-idx', type=int)
 @click.argument('gln-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
 @click.argument('dihe-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
-def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, load_classifier_index, gln_state, dihe_state):
+def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, load_classifier_index, plano_idx, gln_state, dihe_state):
     if datatype == 'gp':
         planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planograms, only=GP_TEST_VALIDATION_SET)
         sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
@@ -1294,10 +1295,11 @@ def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, lo
     generator = production.ProposalGenerator(proposal_generator, confidence_threshold=0.5)
     classifier = production.Classifier(encoder, sampleset, batch_size=8, load=load_classifier_index)
 
+    datum = planoset[plano_idx] if plano_idx is not None else random.choice(planoset)
     if datatype == 'gp':
-        image, _, _, plano = random.choice(planoset)
+        image, _, _, plano = datum
     else:
-        image, plano = random.choice(planoset)
+        image, plano = datum
     boxes, images = generator.generate_proposals_and_images(image)
     classes = [ann[0] for ann in classifier.classify(images)]
 
@@ -1305,16 +1307,13 @@ def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, lo
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 12)) if image.shape[2] < image.shape[1] else plt.subplots(2, 1, figsize=(12, 12))
     utils.build_fig(image, detections=tvops.box_convert(boxes, 'xyxy', 'xywh'), ax=ax1)
     utils.build_rebuild(boxes, classes, rebuildset, maxy, ax=ax2)
-    ax2.set_xlim(boxes[:, 0].min().item(), boxes[:, 2].max().item())
-    ax2.set_ylim(0, maxy - boxes[:, 1].min().item())
-    plt.show()
 
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 12)) if image.shape[2] < image.shape[1] else plt.subplots(2, 1, figsize=(12, 12))
     boxes = plano['boxes']
     labels = [l.split('.')[0] for l in plano['labels']] if datatype == 'gp' else plano['labels']
     maxy = boxes[:, 3].max().item()
-    utils.build_rebuild(boxes, labels, rebuildset, maxy)
-    plt.xlim(boxes[:, 0].min().item(), boxes[:, 2].max().item())
-    plt.ylim(0, maxy - boxes[:, 1].min().item())
+    utils.build_fig(image, ax=ax1)
+    utils.build_rebuild(boxes, labels, rebuildset, maxy, ax=ax2)
     plt.show()
 
 @cli.command()
@@ -1341,15 +1340,16 @@ def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, lo
 )
 @click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
 @click.option('--load-classifier-index', type=click.Path())
+@click.option('--verbose/--no-verbose', default=False)
 @click.argument('gln-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
 @click.argument('dihe-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
-def eval_planograms(img_dir, test_imgs, test_annotations, planograms, datatype, load_classifier_index, gln_state, dihe_state):
+def eval_planograms(img_dir, test_imgs, test_annotations, planograms, datatype, load_classifier_index, verbose, gln_state, dihe_state):
     if datatype == 'gp':
-        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planograms, only=GP_TEST_VALIDATION_SET)
+        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planograms)
         sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
     else:
         planoset = datautils.InternalPlanoSet(planograms)
@@ -1370,12 +1370,25 @@ def eval_planograms(img_dir, test_imgs, test_annotations, planograms, datatype, 
     comparator = production.PlanogramComparator()
 
     evaluator = production.PlanogramEvaluator(generator, classifier, comparator)
-    total = 0
-    for img, plano in planoset:
-        acc =  evaluator.evaluate(img, plano)
-        print('Planogram accuracy', acc)
-        total += acc
-    print(total / len(planoset))
+    total_a = 0
+    total_e = 0
+    for i, (datum) in enumerate(planoset):
+        if datatype == 'gp':
+            img, _, _, plano = datum
+        else:
+            img, plano = datum
+
+        acc = evaluator.evaluate(img, plano)
+        err = acc - plano['actual_accuracy']
+        sqerr = err ** 2
+        if verbose:
+            print(f'Detected accuracy: {acc:.3f}, Actual accuracy: {plano["actual_accuracy"]:.3f}, Error: {err:.3f}, SE: {sqerr:.3f}')
+        elif i % 10 == 0:
+            print(i)
+        total_e += sqerr
+        total_a += acc
+    print(f'--> Mean accuracy {(total_a / len(planoset)).item()}')
+    print(f'--> MSE: {(total_e / len(planoset)).item()}')
 
 @cli.command()
 @click.option(
@@ -1401,13 +1414,14 @@ def eval_planograms(img_dir, test_imgs, test_annotations, planograms, datatype, 
 )
 @click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
 @click.option('--load-classifier-index', type=click.Path())
+@click.option('--plano-idx', type=int)
 @click.argument('gln-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
 @click.argument('dihe-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
-def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, load_classifier_index, gln_state, dihe_state):
+def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, load_classifier_index, plano_idx, gln_state, dihe_state):
     if datatype == 'gp':
         planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planos)
         sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
@@ -1427,10 +1441,11 @@ def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, 
     encoder.requires_grad_(False)
     del enc_state
 
+    datum = planoset[plano_idx] if plano_idx is not None else random.choice(planoset)
     if datatype == 'gp':
-        image, _, _, expected = random.choice(planoset)
+        image, _, _, expected = datum
     else:
-        image, expected = random.choice(planoset)
+        image, expected = datum
     generator = production.ProposalGenerator(proposal_generator)
     classifier = production.Classifier(encoder, sampleset, batch_size=8, load=load_classifier_index)
 
@@ -1439,7 +1454,7 @@ def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, 
     actual = {'boxes': boxes.detach().cpu(), 'labels': classes}
 
     h, w = image.shape[1:]
-    reproj_threshold = max(h, w) * 0.005
+    reproj_threshold = min(h, w) * 0.01
 
     maxy = boxes[:, 3].max().item()
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 12)) if image.shape[2] < image.shape[1] else plt.subplots(2, 1, figsize=(12, 12))
