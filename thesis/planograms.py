@@ -172,14 +172,24 @@ def _project(homography, x, y):
     res = torch.matmul(homography, torch.tensor([x, y, 1], dtype=torch.float))
     return res[:2] / res[2]
 
+def _get_ransac_points(boxes):
+    centres = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in boxes])
+    return torch.cat((boxes[:, :2], boxes[:, 2:], centres))
+
+def _get_ransac_points_cross(boxes): # These might give a bit better results but not a big enough improvement to use in the thesis proper
+    centres = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in boxes])
+    tops = torch.stack((centres[:, 0], boxes[:, 1])).transpose(0, 1)
+    bottoms = torch.stack((centres[:, 0], boxes[:, 3])).transpose(0, 1)
+    lefts = torch.stack((boxes[:, 0], centres[:, 1])).transpose(0, 1)
+    rights = torch.stack((boxes[:, 2], centres[:, 1])).transpose(0, 1)
+    return torch.cat((centres, tops, bottoms, lefts, rights))
+
 def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_threshold = 0.5, return_matched_actual=False, report_accuracy=False):
     nodes1, nodes2 = (list(l) for l in zip(*solution))
     boxes1 = b1[nodes1]
     boxes2 = b2[nodes2]
-    centres1 = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in boxes1])
-    centres2 = torch.tensor([[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in boxes2])
-    points1 = torch.cat((boxes1[:, :2], boxes1[:, 2:], centres1))
-    points2 = torch.cat((boxes2[:, :2], boxes2[:, 2:], centres2))
+    points1 = _get_ransac_points(boxes1)
+    points2 = _get_ransac_points(boxes2)
     if len(solution) < 2: # Too few points --> add some more (however, always adding these makes the homography perform worse)
         points1 = torch.cat((points1, boxes1[:, (2, 1)], boxes1[:, (0, 3)]))
         points2 = torch.cat((points2, boxes2[:, (2, 1)], boxes2[:, (0, 3)]))

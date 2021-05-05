@@ -138,7 +138,7 @@ def visualize_sku110k(imgs, annotations, index, method, flip, gaussians, model, 
         prediction = utils.recall_tensor(model_result[0]['boxes'][model_result[0]['scores'] > conf_thresh])
     utils.show(img,
         detections=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in prediction],
-        groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']]
+        groundtruth=[] if model is not None else [[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']]
     ) # TODO: Torch has a built in function for converting between coordinate systems
     if save is not None:
         utils.save(img, save, groundtruth=[[x1, y1, x2 - x1, y2 - y1] for x1, y1, x2, y2 in anns['boxes']])
@@ -1161,6 +1161,70 @@ def eval_dihe(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm,
     multiple=True,
     default=GP_TRAIN_FOLDERS
 )
+@click.option(
+    '--test-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option('--resnet-layers', type=int, multiple=True, default=[2, 3])
+@click.option('--batch-norm/--no-batch-norm', default=False)
+@click.option('--batch-size', type=int, default=8)
+@click.option('--dataloader-workers', type=int, default=8)
+@click.option('--enc-weights')
+@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none')
+@click.option('--knn', type=int, default=4)
+@click.option('--load-classifier-index', type=click.Path())
+def visualize_classification_performance(img_dir, test_imgs, annotations, resnet_layers, batch_norm, batch_size, dataloader_workers, enc_weights, only, knn, load_classifier_index):
+    sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
+    rebuildset = datautils.GroceryProductsDataset(img_dir, include_annotations=True, resize=False)
+
+    only_list = None
+    skip_list = None
+    if only == 'test':
+        skip_list = GP_TEST_VALIDATION_SET_SIZE
+    elif only == 'val':
+        only_list = GP_TEST_VALIDATION_SET_SIZE
+    testset = datautils.GroceryProductsTestSet(test_imgs, annotations, only=only_list, skip=skip_list)
+
+    encoder = classification.macvgg_embedder(model='vgg16_bn' if batch_norm else 'vgg16', pretrained=enc_weights is None).cuda()
+    if enc_weights is not None:
+        state = torch.load(enc_weights)
+        encoder.load_state_dict(state[classification_training.EMBEDDER_STATE_DICT_KEY])
+    encoder.eval()
+
+    classifier = production.Classifier(encoder, sampleset, k=knn, batch_size=8, load=load_classifier_index)
+
+    fig = plt.figure(figsize=(5.5, 5.5))
+    fig.set_dpi(200)
+    gs = fig.add_gridspec(knn+1, knn+1)
+    source_ax = [fig.add_subplot(gs[y, 0]) for y in range(knn+1)]
+    target_ax = [[fig.add_subplot(gs[y, x]) for x in range(1, knn+1)] for y in range(knn+1)]
+    for s_ax, t_ax in zip(source_ax, target_ax):
+        img, anns, boxes = random.choice(testset)
+        box = random.choice(boxes).to(dtype=torch.long)
+        img = img[:, max(0, box[1]):box[3], max(0, box[0]):box[2]]
+        utils.build_fig(img, ax=s_ax)
+
+        anns = classifier.classify(datautils.resize_for_classification(img)[None])[0]
+        for ann, ax in zip(anns, t_ax):
+            idx = rebuildset.index_for_ann(ann)
+            im, _, _, _ = rebuildset[idx]
+            utils.build_fig(im, ax=ax)
+
+    plt.show()
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
 @click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
 @click.option(
     '--out-dir',
@@ -1274,7 +1338,7 @@ def eval_product_detection(img_dir, test_imgs, annotations, iou_threshold, coco,
 )
 def rebuild_scene(img_dir, test_imgs, test_annotations, planograms, datatype, load_classifier_index, plano_idx, gln_state, dihe_state):
     if datatype == 'gp':
-        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planograms, only=GP_TEST_VALIDATION_SET)
+        planoset = datautils.PlanogramTestSet(test_imgs, test_annotations, planograms)
         sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
         rebuildset = datautils.GroceryProductsDataset(img_dir, include_annotations=True, resize=False)
     else:
@@ -1466,8 +1530,8 @@ def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, 
     ga = planograms.build_graph(actual['boxes'], actual['labels'], 0.5)
     utils.build_rebuild(expected['boxes'], expected['labels'], rebuildset, ax=ax1)
     utils.draw_planograph(ge, expected['boxes'], ax=ax1, flip_y=True)
-    utils.build_fig(image, ax=ax2)
-    utils.draw_planograph(ga, actual['boxes'], ax=ax2)
+    utils.build_rebuild(boxes, classes, rebuildset, maxy, ax=ax2)
+    utils.draw_planograph(ga, actual['boxes'], ax=ax2, flip_y=True)
 
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 12)) if image.shape[2] < image.shape[1] else plt.subplots(2, 1, figsize=(12, 12))
@@ -1477,8 +1541,8 @@ def plot_planogram_eval(img_dir, test_imgs, test_annotations, planos, datatype, 
     sga = ga.subgraph(nodes_a)
     utils.build_rebuild(expected['boxes'], expected['labels'], rebuildset, ax=ax1)
     utils.draw_planograph(sge, expected['boxes'], ax=ax1, flip_y=True)
-    utils.build_fig(image, ax=ax2)
-    utils.draw_planograph(sga, actual['boxes'], ax=ax2)
+    utils.build_rebuild(boxes, classes, rebuildset, maxy, ax=ax2)
+    utils.draw_planograph(sga, actual['boxes'], ax=ax2, flip_y=True)
     if not len(matching):
         plt.show()
         return
