@@ -464,6 +464,42 @@ def planogram_test(imgs, annotations, planograms):
     multiple=True,
     default=GP_TRAIN_FOLDERS
 )
+@click.option(
+    '--test-imgs',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_TEST_DIR
+)
+@click.option(
+    '--annotations',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_ANN_DIR
+)
+@click.option(
+    '--planograms',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    default=GP_PLANO_DIR
+)
+def visualize_gp_planoset(img_dir, test_imgs, annotations, planograms):
+    data = datautils.PlanogramTestSet(test_imgs, annotations, planograms)
+    rebuildset = datautils.GroceryProductsDataset(img_dir, include_annotations=True, resize=False)
+    img, anns, boxes, plano = random.choice(data)
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(6, 8)) if img.shape[2] >= img.shape[1] else plt.subplots(1, 3, figsize=(6, 6))
+    fig.set_dpi(300)
+
+    centres = torch.tensor([[(x1 + x2) / 2, -(y1 + y2) / 2] for x1, y1, x2, y2 in plano['boxes']])
+    nx.draw(plano['graph'], pos={i: (x.item(), y.item()) for i, (x, y) in enumerate(centres)}, ax=ax1, with_labels=True)
+    utils.build_rebuild(plano['boxes'], plano['labels'], rebuildset, ax=ax2)
+    utils.build_fig(img, ax=ax3)
+    plt.show()
+
+@cli.command()
+@click.option(
+    '--img-dir',
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    multiple=True,
+    default=GP_TRAIN_FOLDERS
+)
 @click.option('--only', type=str, multiple=True)
 def gp_mask_test(img_dir, only):
     data = datautils.GroceryProductsDataset(img_dir, only=only if len(only) else None)
