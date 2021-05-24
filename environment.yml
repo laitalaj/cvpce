@@ -1,0 +1,9 @@
+name: cvpce
+channels:
+  - pytorch
+  - nvidia
+dependencies:
+  - python=3.8
+  - pytorch=1.8
+  - torchvision=0.9
+  - cudatoolkit=11.1
