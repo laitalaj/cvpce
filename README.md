@@ -12,7 +12,7 @@ you'll need a NVidia card to run cvpce.
 We suggest using [Conda](https://docs.conda.io/en/latest/)
 to avoid CUDA installation pains.
 To create a Conda environment for cvpce,
-simply utilize the provided `environment.yml`:
+simply utilize the provided [`environment.yml`](./environment.yml):
 ```sh
 conda env create -f environment.yml
 conda activate cvpce
@@ -35,3 +35,8 @@ Go ahead and
 cvpce --help
 ```
 after installing to explore the available commands!
+
+## Pre-trained weights
+
+Pre-trained model weights are available in
+[the releases.](https://github.com/laitalaj/cvpce/releases/)
