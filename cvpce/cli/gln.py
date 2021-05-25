@@ -14,15 +14,28 @@ from ..models import proposals
 
 @click.group()
 def gln():
+    '''
+    GLN training and evaluation.
+
+    This command group contains functionality related to the Gaussian layer network (GLN) of Kant (2020).
+    It especially includes functions for training a GLN and for evaluating product proposal generation performance.
+    '''
     pass
 
 @gln.command()
-@click.option('--gln', type=click.Choice(['logging', 'plain']), default='logging')
+@click.option('--gln', type=click.Choice(['logging', 'plain']), default='logging', show_default=True, help='Type of GLN to use, "logging" to get extra info out')
 @click.option(
     '--input-sizes', multiple=True, type = (int, int),
-    default = [(300, 200), (200, 300), (600, 400)]
+    default = [(300, 200), (200, 300), (600, 400)], show_default=True,
+    help = 'Sizes for random input images'
 )
 def build_assistant(gln, input_sizes):
+    '''
+    Log a bunch of information from an untrained GLN.
+
+    This is a command that I used when trying to figure out how to fit each of the
+    bits and pieces proposed by Kant into the PyTorch RetinaNet.
+    '''
     models = {
         'logging': proposals.state_logging_gln,
         'plain': proposals.gln,
@@ -43,33 +56,46 @@ def build_assistant(gln, input_sizes):
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True,
+    help='Path to SKU-110K image dir'
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file used for training'
 )
 @click.option(
     '--eval-annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file used for evaluation'
 )
 @click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
-    default=OUT_DIR
+    default=OUT_DIR, show_default=True,
+    help='Output directory for models and images'
 )
-@click.option('--method', type=click.Choice(['normal', 'kant', 'simple']), default='normal')
-@click.option('--tanh/--no-tanh', default=False,)
-@click.option('--batch-size', type=int, default=1)
-@click.option('--dataloader-workers', type=int, default=4)
-@click.option('--epochs', type=int, default=11)
-@click.option('--gpus', type=int, default=1)
-@click.option('--load', default=None)
-@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
-@click.option('--hyperopt-params/--no-hyperopt-params', default=True)
+@click.option('--method', type=click.Choice(['normal', 'kant', 'simple']), default='normal',
+    show_default=True, help='Gaussian generation method - use simple if you\'ve set --tanh, otherwise use either kant or normal')
+@click.option('--tanh/--no-tanh', default=False, show_default=True, help='Whether to use tanh as the last activation in Gaussian subnet')
+@click.option('--batch-size', type=int, default=1, show_default=True, help='Batch size per GPU')
+@click.option('--dataloader-workers', type=int, default=4, show_default=True, help='Number of data loading processes per GPU')
+@click.option('--epochs', type=int, default=11, show_default=True, help='Number of epochs to train')
+@click.option('--gpus', type=int, default=1, show_default=True, help='Number of GPUs to use')
+@click.option('--load', default=None, help='Path to a saved model to continue training')
+@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False, show_default=True, help='Trim "module." prefix from loaded model, legacy option, shouldn\'t be necessary')
+@click.option('--hyperopt-params/--no-hyperopt-params', default=True, show_default=True, help='Use / don\'t use our hyperoptimized parameters')
 def train(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_size, dataloader_workers, epochs, gpus, load, trim_module_prefix, hyperopt_params):
+    '''
+    Train a GLN.
+
+    Our best model used
+
+    \b
+    --tanh --method simple --hyperopt-params
+    '''
     gauss_methods = {
         'normal': {'gauss_generate_method': datautils.generate_via_multivariate_normal, 'gauss_join_method': datautils.join_via_max},
         'kant': {'gauss_generate_method': datautils.generate_via_kant_method, 'gauss_join_method': datautils.join_via_replacement},
@@ -106,31 +132,38 @@ def train(imgs, annotations, eval_annotations, out_dir, method, tanh, batch_size
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True,
+    help='Path to SKU-110K image dir'
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file used for training'
 )
 @click.option(
     '--eval-annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file used for evaluation'
 )
-@click.option('--name', type=str, default='gln')
-@click.option('--batch-size', type=int, default=1)
-@click.option('--dataloader-workers', type=int, default=4)
-@click.option('--epochs', type=int, default=10)
-@click.option('--samples', type=int, default=100)
-@click.option('--load/--no-load', default=False)
-@click.option('--load-algo', type=click.Path())
+@click.option('--name', type=str, default='gln', show_default=True, help='Name for the Ray Tune hyperopt operation')
+@click.option('--batch-size', type=int, default=1, show_default=True, help='Batch size per GPU')
+@click.option('--dataloader-workers', type=int, default=4, show_default=True, help='Number of data loading processes per GPU')
+@click.option('--epochs', type=int, default=10, show_default=True, help='Number of epochs to train each model')
+@click.option('--samples', type=int, default=100, show_default=True, help='Number of models to train')
+@click.option('--load/--no-load', default=False, show_default=True, help='Should an existing hyperopt run be loaded')
+@click.option('--load-algo', type=click.Path(), help='Path to load hyperopt algorithm state from')
 @click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
-    default=OUT_DIR
+    default=OUT_DIR, show_default=True,
+    help='Output directory for models and images'
 )
 def hyperopt(imgs, annotations, eval_annotations, name, batch_size, dataloader_workers, epochs, samples, load, load_algo, out_dir):
+    '''
+    Optimize GLN hyperparameters.
+    '''
     config = {
         'tanh': tune.choice([True, False]),
 
@@ -191,29 +224,37 @@ def hyperopt(imgs, annotations, eval_annotations, name, batch_size, dataloader_w
         print()
 
 @gln.command()
-@click.option('--dataset', type=click.Choice(('sku110k', 'gp180', 'gpbaseline')), default='sku110k')
+@click.option('--dataset', type=click.Choice(('sku110k', 'gp180', 'gpbaseline')),
+    default='sku110k', show_default=True, help='Dataset type that --imgs and --annotations points to')
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True,
+    help='Path to image dir'
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to annotations used for testing'
 )
-@click.option('--batch-size', type=int, default=1)
-@click.option('--dataloader-workers', type=int, default=4)
-@click.option('--metric-workers', type=int, default=8)
-@click.option('--iou-threshold', '-t', type=float, multiple=True, default=(0.5,))
-@click.option('--coco/--no-coco', default=False)
-@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
-@click.option('--plots/--no-plots', default=True)
-@click.option('--plot-res-reduction', type=int, default=200)
+@click.option('--batch-size', type=int, default=1, show_default=True, help='Batch size')
+@click.option('--dataloader-workers', type=int, default=4, show_default=True, help='Number of data loading processes')
+@click.option('--metric-workers', type=int, default=8, show_default=True, help='Number of metric calculating processes')
+@click.option('--iou-threshold', '-t', type=float, multiple=True, default=(0.5,), show_default=True, help='IoU thresholds to calculate metrics for')
+@click.option('--coco/--no-coco', default=False, show_default=True, help='Whether to use COCO IoU thresholds instead of whatever\'s set in --iou-threshold')
+@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False, show_default=True, help='Trim "module." prefix from loaded model, legacy option, shouldn\'t be necessary')
+@click.option('--plots/--no-plots', default=True, show_default=True, help='Draw / don\'t draw precision-recall curves')
+@click.option('--plot-res-reduction', type=int, default=200, show_default=True, help='Draw only every <this>th sample for precision-recall curves')
 @click.argument('state-file',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
 def eval(dataset, imgs, annotations, batch_size, dataloader_workers, metric_workers, iou_threshold, coco, trim_module_prefix, plots, plot_res_reduction, state_file):
+    '''
+    Evaluate product proposal generation performance.
+
+    STATE_FILE should point to some GLN weights.
+    '''
     if dataset == 'sku110k':
         dataset = datautils.SKU110KDataset(imgs, annotations, skip=SKU110K_SKIP, include_gaussians=False, flip_chance=0)
     elif dataset == 'gp180':
@@ -238,19 +279,30 @@ def eval(dataset, imgs, annotations, batch_size, dataloader_workers, metric_work
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True,
+    help='Path to SKU-110K image dir'
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file used in iteration'
 )
-@click.option('--outlier-threshold', type=int, default=3)
-@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False)
+@click.option('--outlier-threshold', type=int, default=3, show_default=True,
+    help='The minimum number of standard deviations a loss needs to be above the average for an image to be considered an outlier')
+@click.option('--trim-module-prefix/--no-trim-module-prefix', default=False, show_default=True, help='Trim "module." prefix from loaded model, legacy option, shouldn\'t be necessary')
 @click.argument('state-file',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
 def seek_sku110k_outliers(imgs, annotations, outlier_threshold, trim_module_prefix, state_file):
+    '''
+    Pass SKU110K data through GLN, print outliers.
+
+    This function was created for determining the SKU110K_SKIP list.
+    It passes all data in the SKU110K dataset (that's not in the skip list)
+    through a GLN and prints info for images that caused training losses
+    more than --outlier-threshold standard deviations above average.
+    '''
     def outliers(loss):
         is_outlier = loss > loss.mean() + outlier_threshold * loss.std()
         indices = is_outlier.nonzero(as_tuple=True)[0]

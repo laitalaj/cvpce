@@ -8,29 +8,39 @@ from ...defaults import SKU110K_IMG_DIR, SKU110K_ANNOTATION_FILE
 
 @click.group()
 def sku110k():
+    '''
+    Commands for SKU-110K dataset.
+
+    This group contains visualization functionality for the SKU-110K dataset
+    used for product proposal generation.
+
+    The actual commands under this don't contain help texts,
+    sorry about that!
+    I'll try to have time to add those in the future.
+    '''
     pass
 
 @sku110k.command()
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True
 )
 @click.option('--index')
 @click.option(
     '--method',
     type=click.Choice(['normal', 'kant', 'simple']),
-    default='simple'
+    default='simple', show_default=True
 )
-@click.option('--flip/--no-flip', default=False)
-@click.option('--gaussians/--no-gaussians', default=True)
+@click.option('--flip/--no-flip', default=False, show_default=True)
+@click.option('--gaussians/--no-gaussians', default=True, show_default=True)
 @click.option('--model', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True))
-@click.option('--conf-thresh', type=float, default=0.45)
+@click.option('--conf-thresh', type=float, default=0.45, show_default=True)
 @click.option('--save', type=click.Path(writable=True))
 @click.option('--save-gaussians', type=click.Path(writable=True))
 def visualize(imgs, annotations, index, method, flip, gaussians, model, conf_thresh, save, save_gaussians):
@@ -72,12 +82,12 @@ def visualize(imgs, annotations, index, method, flip, gaussians, model, conf_thr
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True
 )
 @click.option('--index', type=int)
 def visualize_discriminator_target(imgs, annotations, index):
@@ -90,12 +100,12 @@ def visualize_discriminator_target(imgs, annotations, index):
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True
 )
 def iter(imgs, annotations):
     data = datautils.SKU110KDataset(imgs, annotations, include_gaussians=False)

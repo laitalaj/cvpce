@@ -8,18 +8,28 @@ from ...defaults import GROZI_ROOT
 
 @click.group()
 def grozi():
+    '''
+    Commands for GroZi-120 dataset.
+
+    This command group contains commands for visualizing various aspects of the GroZi-120 dataset (Merler et al. 2007),
+    and for extracting test images from the dataset's provided videos.
+
+    The actual commands under this don't contain help texts,
+    sorry about that!
+    I'll try to have time to add those in the future.
+    '''
     pass
 
 @grozi.command()
-@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT, show_default=True)
 def visualize_train(root):
     dataset = datautils.GroZiDataset(root)
     img, _ = random.choice(dataset)
     utils.show(img)
 
 @grozi.command()
-@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
-@click.option('--select-from', type=click.Choice(['none', 'min', 'max']), default='none')
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT, show_default=True)
+@click.option('--select-from', type=click.Choice(['none', 'min', 'max']), default='none', show_default=True)
 def visualize_test(root, select_from):
     dataset = datautils.GroZiTestSet(root)
     if select_from == 'min':
@@ -36,7 +46,7 @@ def visualize_test(root, select_from):
     utils.show(img, groundtruth=tvops.box_convert(boxes, 'xyxy', 'xywh'), groundtruth_labels=anns)
 
 @grozi.command()
-@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT, show_default=True)
 def visualize(root):
     train_set = datautils.GroZiDataset(root)
     test_set = datautils.GroZiTestSet(root)
@@ -59,6 +69,6 @@ def visualize(root):
     utils.draw_dataset_sample(test_imgs, test_boxes, test_anns, train_imgs, train_anns)
 
 @grozi.command()
-@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT)
+@click.option('--root', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True), default=GROZI_ROOT, show_default=True)
 def extract_test_images(root):
     datautils.extract_grozi_test_imgs(root)

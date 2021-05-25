@@ -18,6 +18,14 @@ from ..models import classification
 
 @click.group()
 def dihe():
+    '''
+    DIHE training and evaluation.
+
+    This command group contains functionality related to the Domain Invariant Hierarchial Embedding (DIHE)
+    of Tonioni et al. (2019).
+    It especially includes functions for training a DIHE, evaluating retail product classification performance
+    and for visualizing said performance.
+    '''
     pass
 
 @dihe.command()
@@ -25,28 +33,35 @@ def dihe():
     '--source-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True,
+    help='Path to GP training image root'
 )
 @click.option(
     '--target-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True,
+    help='Path to SKU-110K image root for discriminator training'
 )
 @click.option(
     '--target-annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file for discriminator training'
 )
 @click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
-    default=OUT_DIR
+    default=OUT_DIR, show_default=True,
+    help='Output directory for models and images'
 )
-@click.option('--batch-size', type=int, default=16)
-@click.option('--dataloader-workers', type=int, default=4)
-@click.option('--epochs', type=int, default=1)
-@click.option('--masks/--no-masks', default=False)
+@click.option('--batch-size', type=int, default=16, show_default=True, help='Batch size')
+@click.option('--dataloader-workers', type=int, default=4, show_default=True, help='Number of data loading processes')
+@click.option('--epochs', type=int, default=1, show_default=True, help='Number of epochs to train')
+@click.option('--masks/--no-masks', default=False, show_default=True, help='Use/don\'t use product masks when training generator')
 def pretrain_gan(source_dir, target_imgs, target_annotations, out_dir, batch_size, dataloader_workers, epochs, masks):
+    '''
+    Pretrain the GAN for DIHE.
+    '''
     options = classification_training.ClassificationTrainingOptions()
 
     options.dataset = datautils.GroceryProductsDataset(source_dir, include_masks=masks)
@@ -64,51 +79,63 @@ def pretrain_gan(source_dir, target_imgs, target_annotations, out_dir, batch_siz
     '--source-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True,
+    help='Path to training image root'
 )
-@click.option('--source-type', type=click.Choice(('gp', 'internal')), default='gp')
-@click.option('--only', type=str, multiple=True)
+@click.option('--source-type', type=click.Choice(('gp', 'internal')), default='gp', show_default=True,
+    help='Training dataset type; gp for Grocery Products, internal for our internal dataset')
+@click.option('--only', type=str, multiple=True, help='Only train with given training data groups')
 @click.option(
     '--target-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True,
+    help='Path to SKU-110K image root for discriminator training'
 )
 @click.option(
     '--target-annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file for discriminator training'
 )
 @click.option(
     '--eval-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True,
+    help='Path to GP test images root for evaluation'
 )
 @click.option(
     '--eval-annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True,
+    help='Path to GP-180 annotations root for evaluation'
 )
 @click.option(
     '--eval-data',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True,
+    help='Path to Grocery Products training images for evaluation'
 )
 @click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
-    default=OUT_DIR
+    default=OUT_DIR, show_default=True,
+    help='Output directory for models and images'
 )
-@click.option('--batch-norm/--no-batch-norm', default=False)
-@click.option('--masks/--no-masks', default=False)
-@click.option('--batch-size', type=int, default=4)
-@click.option('--dataloader-workers', type=int, default=4)
-@click.option('--epochs', type=int, default=10)
-@click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
-@click.option('--load-enc', default=None)
-@click.option('--gpus', type=int, default=1)
-@click.option('--hyperopt-params/--no-hyperopt-params', default=True)
+@click.option('--batch-norm/--no-batch-norm', default=False, show_default=True, help='Use/don\'t use batch normalization in encoder')
+@click.option('--masks/--no-masks', default=False, show_default=True, help='Use/don\'t use product masks in generator')
+@click.option('--batch-size', type=int, default=4, show_default=True, help='Batch size per GPU')
+@click.option('--dataloader-workers', type=int, default=4, show_default=True, help='Number of data loading processes per GPU')
+@click.option('--epochs', type=int, default=10, show_default=True, help='Number of epochs to train')
+@click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE,
+    show_default=True, help='Path to pretrained GAN state')
+@click.option('--load-enc', default=None, help='Path to a saved model to continue training')
+@click.option('--gpus', type=int, default=1, show_default=True, help='Number of GPUs to use')
+@click.option('--hyperopt-params/--no-hyperopt-params', default=True, show_default=True, help='Use / don\'t use our hyperoptimized parameters')
 def train(source_dir, source_type, only, target_imgs, target_annotations, eval_imgs, eval_annotations, eval_data, out_dir, batch_norm, masks, batch_size, dataloader_workers, epochs, load_gan, load_enc, gpus, hyperopt_params):
+    '''
+    Train DIHE.
+    '''
     options = classification_training.ClassificationTrainingOptions()
 
     if source_type == 'gp':
@@ -144,44 +171,56 @@ def train(source_dir, source_type, only, target_imgs, target_annotations, eval_i
     '--source-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True,
+    help='Path to training image root'
 )
-@click.option('--only', type=str, multiple=True)
+@click.option('--source-type', type=click.Choice(('gp', 'internal')), default='gp', show_default=True,
+    help='Training dataset type; gp for Grocery Products, internal for our internal dataset')
+@click.option('--only', type=str, multiple=True, help='Only train with given training data groups')
 @click.option(
     '--target-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=SKU110K_IMG_DIR
+    default=SKU110K_IMG_DIR, show_default=True,
+    help='Path to SKU-110K image root for discriminator training'
 )
 @click.option(
     '--target-annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=SKU110K_ANNOTATION_FILE
+    default=SKU110K_ANNOTATION_FILE, show_default=True,
+    help='Path to SKU-110K annotation file for discriminator training'
 )
 @click.option(
     '--eval-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True,
+    help='Path to GP test images root for evaluation'
 )
 @click.option(
     '--eval-annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True,
+    help='Path to GP-180 annotations root for evaluation'
 )
-@click.option('--masks/--no-masks', default=False)
-@click.option('--batch-size', type=int, default=4)
-@click.option('--dataloader-workers', type=int, default=4)
-@click.option('--epochs', type=int, default=10)
-@click.option('--samples', type=int, default=100)
-@click.option('--name', type=str, default='dihe')
-@click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE)
-@click.option('--load/--no-load', default=False)
-@click.option('--load-algo', type=click.Path())
+@click.option('--masks/--no-masks', default=False, show_default=True, help='Use/don\'t use product masks in generator')
+@click.option('--batch-size', type=int, default=4, show_default=True, help='Batch size per model')
+@click.option('--dataloader-workers', type=int, default=4, show_default=True, help='Number of data loading processes per model')
+@click.option('--epochs', type=int, default=10, show_default=True, help='Number of epochs to train each model')
+@click.option('--samples', type=int, default=100, show_default=True, help='Number of models to train')
+@click.option('--name', type=str, default='dihe', show_default=True, help='Name for the Ray Tune hyperopt operation')
+@click.option('--load-gan', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True), default=PRETRAINED_GAN_FILE,
+    show_default=True, help='Path to pretrained GAN state')
+@click.option('--load/--no-load', default=False, show_default=True, help='Should an existing hyperopt run be loaded')
+@click.option('--load-algo', type=click.Path(), help='Path to load hyperopt algorithm state from')
 @click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
-    default=OUT_DIR
+    default=OUT_DIR, show_default=True,
+    help='Output directory for models and images'
 )
 def hyperopt(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_annotations, masks, batch_size, dataloader_workers, epochs, samples, name, load_gan, load, load_algo, out_dir):
+    '''
+    Optimize DIHE hyperparameters.
+    '''
     config = {
         'batchnorm': tune.choice([True, False]),
         'multiplier': tune.uniform(0.5, 0.99999),
@@ -220,27 +259,34 @@ def hyperopt(source_dir, only, target_imgs, target_annotations, eval_imgs, eval_
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True,
+    help='Path to GP training image root'
 )
 @click.option(
     '--test-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True,
+    help='Path to GP test image root'
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True,
+    help='Path to GP-180 annotation root'
 )
-@click.option('--model', type=click.Choice(('vgg16', 'resnet50')), default='vgg16')
-@click.option('--resnet-layers', type=int, multiple=True, default=[2, 3])
-@click.option('--batch-norm/--no-batch-norm', default=True)
-@click.option('--batch-size', type=int, default=8)
-@click.option('--dataloader-workers', type=int, default=8)
-@click.option('--enc-weights')
-@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none')
-@click.option('--knn', type=int, multiple=True, default=(1,))
+@click.option('--model', type=click.Choice(('vgg16', 'resnet50')), default='vgg16', show_default=True, help='Base for the encoder model')
+@click.option('--resnet-layers', type=int, multiple=True, default=[2, 3], show_default=True,
+    help='If model is resnet50, which blocks should the descriptor be extracted from')
+@click.option('--batch-norm/--no-batch-norm', default=False, show_default=True, help='Use/don\'t use batch normalization in encoder')
+@click.option('--batch-size', type=int, default=8, show_default=True, help='Batch size')
+@click.option('--dataloader-workers', type=int, default=8, show_default=True, help='Number of data loading processes')
+@click.option('--enc-weights', help='Path to encoder weights - if not set, non-finetuned ImageNet weights are used')
+@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none', show_default=True, help='Use all images (none) or only the test- or validation split')
+@click.option('--knn', type=int, multiple=True, default=(1,), show_default=True, help='Consider classification correct if the correct class is among this many closest neighbours')
 def eval(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm, batch_size, dataloader_workers, enc_weights, only, knn):
+    '''
+    Evaluate classification performance.
+    '''
     sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
 
     only_list = None
@@ -267,27 +313,34 @@ def eval(img_dir, test_imgs, annotations, model, resnet_layers, batch_norm, batc
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True,
+    help='Path to GP training image root'
 )
 @click.option(
     '--test-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True,
+    help='Path to GP test image root'
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True,
+    help='Path to GP-180 annotation root'
 )
-@click.option('--resnet-layers', type=int, multiple=True, default=[2, 3])
-@click.option('--batch-norm/--no-batch-norm', default=False)
-@click.option('--batch-size', type=int, default=8)
-@click.option('--dataloader-workers', type=int, default=8)
-@click.option('--enc-weights')
-@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none')
-@click.option('--knn', type=int, default=4)
-@click.option('--load-classifier-index', type=click.Path())
-def visualize_performance(img_dir, test_imgs, annotations, resnet_layers, batch_norm, batch_size, dataloader_workers, enc_weights, only, knn, load_classifier_index):
+@click.option('--batch-norm/--no-batch-norm', default=False, show_default=True, help='Use/don\'t use batch normalization in encoder')
+@click.option('--enc-weights', help='Path to encoder weights - if not set, non-finetuned ImageNet weights are used')
+@click.option('--only', type=click.Choice(('none', 'test', 'val')), default='none', show_default=True, help='Use all images (none) or only the test- or validation split')
+@click.option('--knn', type=int, default=4, show_default=True, help='How many nearest neighbours to show')
+@click.option('--load-classifier-index', type=click.Path(), help='Load pre-embedded images from given path instead of calculating the embedding on the fly')
+def visualize_performance(img_dir, test_imgs, annotations, batch_norm, enc_weights, only, knn, load_classifier_index):
+    '''
+    Visualize classification performance.
+
+    Creates a plot with training --knn + 1 test images on the left column
+    and --knn training images corresponding to the nearest classifications of each training image
+    to the right of them.
+    '''
     sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
     rebuildset = datautils.GroceryProductsDataset(img_dir, include_annotations=True, resize=False)
 
@@ -331,18 +384,29 @@ def visualize_performance(img_dir, test_imgs, annotations, resnet_layers, batch_
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True,
+    help='Path to training image root'
 )
-@click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp')
+@click.option('--datatype', type=click.Choice(('gp', 'internal')), default='gp', show_default=True,
+    help='Dataset type; gp for Grocery Product, internal for our internal dataset')
 @click.option(
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
-    default=OUT_DIR
+    default=OUT_DIR, show_default=True,
+    help='Output directory for embedded images'
 )
 @click.argument('dihe-state',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
 )
 def prebuild_index(img_dir, datatype, out_dir, dihe_state):
+    '''
+    Pre-embed images.
+
+    Passes all the images in the training set through the encoder
+    and saves the resulting embedding vectors.
+    The resulting file can be used with the --load-classifier-index -option
+    in various commands.
+    '''
     if datatype == 'gp':
         sampleset = datautils.GroceryProductsDataset(img_dir, include_annotations=True)
     else:

@@ -12,12 +12,12 @@ from ...defaults import COCO_IMG_DIR, COCO_ANNOTATION_FILE
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=COCO_IMG_DIR
+    default=COCO_IMG_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=COCO_ANNOTATION_FILE
+    default=COCO_ANNOTATION_FILE, show_default=True
 )
 def visualize_coco(imgs, annotations):
     data = dsets.CocoDetection(root=imgs, annFile=annotations, transform=tforms.ToTensor())
@@ -28,17 +28,17 @@ def visualize_coco(imgs, annotations):
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=COCO_IMG_DIR
+    default=COCO_IMG_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=COCO_ANNOTATION_FILE
+    default=COCO_ANNOTATION_FILE, show_default=True
 )
 @click.option(
     '--method',
     type=click.Choice(['normal', 'kant']),
-    default='normal'
+    default='normal', show_default=True
 )
 def visualize_coco_gaussians(imgs, annotations, method):
     gauss_methods = {

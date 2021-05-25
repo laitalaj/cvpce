@@ -14,18 +14,29 @@ from ...defaults import GP_ROOT, GP_TEST_DIR, GP_TEST_VALIDATION_SET, GP_ANN_DIR
 
 @click.group()
 def gp():
+    '''
+    Commands for Grocery Products dataset.
+
+    This command group contains commands for visualizing various aspects of the
+    Grocery Products dataset (George et al. 2014)
+    and the annotations, planograms and extra data in GP-180 (Tonioni et al. 2017).
+
+    The actual commands under this don't contain help texts,
+    sorry about that!
+    I'll try to have time to add those in the future.
+    '''
     pass
 
 @gp.command()
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
-    default=GP_BASELINE_ANN_FILE
+    default=GP_BASELINE_ANN_FILE, show_default=True
 )
 def visualize_baseline(imgs, annotations):
     data = datautils.GPBaselineDataset(imgs, annotations)
@@ -39,7 +50,7 @@ def visualize_baseline(imgs, annotations):
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True
 )
 @click.option('--only', type=str, multiple=True)
 def visualize_train(img_dir, only):
@@ -54,12 +65,12 @@ def visualize_train(img_dir, only):
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True
 )
 @click.option('--store', type=int)
 @click.option('--image', type=int)
@@ -80,22 +91,22 @@ def visualize_test(imgs, annotations, store, image):
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True
 )
 @click.option(
     '--test-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True
 )
 @click.option(
     '--planograms',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_PLANO_DIR
+    default=GP_PLANO_DIR, show_default=True
 )
 def visualize_planoset(img_dir, test_imgs, annotations, planograms):
     data = datautils.PlanogramTestSet(test_imgs, annotations, planograms)
@@ -116,17 +127,17 @@ def visualize_planoset(img_dir, test_imgs, annotations, planograms):
     '--train-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True
 )
 @click.option(
     '--test-imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True
 )
 def visualize(train_imgs, test_imgs, annotations):
     ann_re = re.compile(r'^(Food/)?(.*?)\..*$')
@@ -166,7 +177,7 @@ def visualize(train_imgs, test_imgs, annotations):
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True
 )
 @click.option('--only', type=str, multiple=True)
 def train_distribution(img_dir, only):
@@ -180,14 +191,14 @@ def train_distribution(img_dir, only):
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True
 )
-@click.option('--only', type=click.Choice(('none', 'test', 'val', 'keep2', 'skip2')), default='none')
+@click.option('--only', type=click.Choice(('none', 'test', 'val', 'keep2', 'skip2')), default='none', show_default=True)
 def test_distribution(imgs, annotations, only):
     only_list = None
     skip_list = None
@@ -210,12 +221,12 @@ def test_distribution(imgs, annotations, only):
 @click.option(
     '--source-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=utils.rel_path(*GP_ROOT, 'Training', 'Food')
+    default=utils.rel_path(*GP_ROOT, 'Training', 'Food'), show_default=True
 )
 @click.option(
-    '--out-dir', type=click.Path(exists=False), default=utils.rel_path(*GP_ROOT, 'Training', 'Food_Fixed')
+    '--out-dir', type=click.Path(exists=False), default=utils.rel_path(*GP_ROOT, 'Training', 'Food_Fixed'), show_default=True
 )
-@click.option('--dry-run/--no-dry-run', default=False)
+@click.option('--dry-run/--no-dry-run', default=False, show_default=True)
 def fix(source_dir, out_dir, dry_run):
     renamed_re = re.compile(r'food_(\d+).jpg')
     to_search = [source_dir]
@@ -262,17 +273,17 @@ def fix(source_dir, out_dir, dry_run):
 @click.option(
     '--imgs',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_TEST_DIR
+    default=GP_TEST_DIR, show_default=True
 )
 @click.option(
     '--annotations',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_ANN_DIR
+    default=GP_ANN_DIR, show_default=True
 )
 @click.option(
     '--planograms',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
-    default=GP_PLANO_DIR
+    default=GP_PLANO_DIR, show_default=True
 )
 def planogram_test(imgs, annotations, planograms):
     data = datautils.PlanogramTestSet(imgs, annotations, planograms, only=GP_TEST_VALIDATION_SET)
@@ -294,7 +305,7 @@ def planogram_test(imgs, annotations, planograms):
     '--img-dir',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     multiple=True,
-    default=GP_TRAIN_FOLDERS
+    default=GP_TRAIN_FOLDERS, show_default=True
 )
 @click.option('--only', type=str, multiple=True)
 def mask_test(img_dir, only):

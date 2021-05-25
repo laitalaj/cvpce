@@ -10,6 +10,17 @@ from ... import datautils, utils
 
 @click.group()
 def internal():
+    '''
+    Internal dataset related commands.
+
+    This command group includes commands for interacting with our internal dataset.
+    Sadly, the dataset is not publicly available,
+    so these are most likely not too useful for non-company people.
+
+    The actual commands under this don't contain help texts,
+    sorry about that!
+    I'll try to have time to add those in the future.
+    '''
     pass
 
 @internal.command()
