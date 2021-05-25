@@ -4,10 +4,6 @@ Computer vision based planogram compliance evaluation.
 Code for the master's thesis of Julius Laitala,
 University of Helsinki, 2021
 
-This README's under construction,
-and the repo needs a bit of refactoring.
-Come back later!
-
 ## Installation
 
 Currently, the functions in cvpce are set up to run only on CUDA.
@@ -29,3 +25,13 @@ pip install .
 ```
 If you wish to tweak cvpce a bit,
 the `-e` flag is your friend!
+
+## Usage
+
+cvpce is a command line tool,
+and a bunch of usage instructions can be accessed with the `--help` option.
+Go ahead and
+```sh
+cvpce --help
+```
+after installing to explore the available commands!
