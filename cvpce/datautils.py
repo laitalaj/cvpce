@@ -481,6 +481,36 @@ class InternalTrainSet(GroceryProductsDataset):
             img[i][alpha_zero] = 1 # set to white where alpha is zero
         return img[:3] # discard alpha
 
+class SimpleFolderSet(tdata.Dataset):
+    def __init__(self, root, train=True, types=('.png', '.jpg', '.jpeg')):
+        self.paths, self.classes = self.build_index(root, types)
+        self.train = train
+    def build_index(self, root, types):
+        paths = []
+        classes = []
+        type_re_part = '|'.join('\\'+ t for t in types)
+        name_re = re.compile(f'^(.*)({type_re_part})$')
+        for f in os.scandir(root):
+            match = name_re.match(f.name)
+            if match is None: continue
+
+            paths.append(f.path)
+            classes.append(match.group(1))
+        return paths, classes
+    def index_for_ann(self, ann):
+        return self.classes.index(ann)
+    def __len__(self):
+        return len(self.paths)
+    def __getitem__(self, index):
+        c = self.classes[index]
+        img = ttf.to_tensor(pil.Image.open(self.paths[index]))
+        if len(img) > 3:
+            img[:, img[3] == 0] = 1
+            img = img[:3] # drop alpha
+        if self.train:
+            img = resize_for_classification(img)
+        return img, img, c, c # doubled for compliance with other datasets
+
 ## DETECTION ##
 
 def iter_grozi_annotations(base_dir, products = 120):

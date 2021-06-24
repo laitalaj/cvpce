@@ -2,15 +2,19 @@ import os
 from functools import partial
 
 import click
+import PIL as pil
 import torch
 from ray import tune
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.schedulers import ASHAScheduler
 from torch import multiprocessing as mp
+import torchvision.ops as tvops
+import torchvision.transforms.functional as ttf
 
 from .. import datautils, proposals_training, proposals_eval, utils
 from ..defaults import SKU110K_IMG_DIR, SKU110K_ANNOTATION_FILE, SKU110K_SKIP, OUT_DIR
 from ..models import proposals
+from ..production import ProposalGenerator
 
 @click.group()
 def gln():
@@ -274,6 +278,33 @@ def eval(dataset, imgs, annotations, batch_size, dataloader_workers, metric_work
         ar += evaluation[t]['ar_300']
     print(f'--> AP {ap / len(thresholds)}')
     print(f'--> AR300 {ar / len(thresholds)}')
+
+@gln.command()
+@click.option('--conf-thresh', type=float, default=0.5, show_default=True, help='Confidence threhsold for detections')
+@click.option('--save', type=click.Path(writable=True), help='Path to save the resulting image to')
+@click.argument('state-file',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+@click.argument('image-file',
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True)
+)
+def detect(conf_thresh, save, state_file, image_file):
+    '''
+    Detect products and visualize the detections.
+    '''
+    state_dict = torch.load(state_file)[proposals_training.MODEL_STATE_DICT_KEY]
+    model = proposals.gln().cuda()
+    model.load_state_dict(state_dict)
+    model.eval()
+    generator = ProposalGenerator(model, confidence_threshold=conf_thresh)
+
+    img = ttf.to_tensor(pil.Image.open(image_file))
+    with torch.no_grad():
+        detections = generator.generate_proposals(img)
+
+    utils.show(img, utils.recall_tensor(tvops.box_convert(detections, 'xyxy', 'xywh')))
+    if save is not None:
+        utils.save(img, save, groundtruth=utils.recall_tensor(tvops.box_convert(detections, 'xyxy', 'xywh')))
 
 @gln.command()
 @click.option(

@@ -54,13 +54,23 @@ class Classifier:
     def load_index(self, pth):
         idx = torch.load(pth)
         return idx['embedding'], idx['annotations']
-    def classify(self, images):
+    def classify(self, images, return_embedding = False):
         res = []
+        if return_embedding:
+            embedding = torch.empty((0, self.encoder.embedding_size), dtype=torch.float, device=self.emb_device)
+
         for i in range(0, len(images), self.batch_size):
             batch = utils.scale_to_tanh(images[i : i+self.batch_size].to(device=self.device))
             emb = self.encoder(batch).detach().to(device = self.emb_device)
+
+            if return_embedding:
+                embedding = torch.cat((embedding, emb))
+
             nearest = nearest_neighbors(self.embedding, emb, self.k)
             res += [[self.annotations[j] for j in n] for n in nearest]
+
+        if return_embedding:
+            return res, embedding
         return res
 
 class PlanogramComparator:

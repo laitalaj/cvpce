@@ -9,6 +9,7 @@ from torchvision import utils as tvutils
 from torchvision.transforms import functional as ttf
 import matplotlib.pyplot as plt
 import matplotlib.collections as pltcollections
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import matplotlib.patches as patches
 import matplotlib.patheffects as effects
 import squarify
@@ -110,6 +111,29 @@ def build_emb_fig(anchors, emb_anchors, positives, emb_positives, figsize=(12, 1
         fig.add_artist(connection)
     
     fig.tight_layout(pad=0.5)
+
+def show_demo_emb_fig(anchors, emb_anchors, positives, emb_positives, draw_positives=True, figsize=(16, 12), zoom=0.13):
+    # TODO: Add lines connecting nearest neighbors
+    emb_all = torch.cat((emb_anchors, emb_positives))
+    components = recall_tensor(pca(emb_all))
+    if draw_positives:
+        images = torch.cat((anchors, positives))
+    else:
+        images = anchors
+        components = components[:len(emb_anchors)]
+
+    _, ax = plt.subplots(figsize=figsize)
+    ax.scatter(components[:, 0], components[:, 1])
+    for (x, y), img in zip(components, images):
+        ab = AnnotationBbox(
+            OffsetImage(img.numpy().transpose((1, 2, 0)), zoom=zoom),
+            (x, y), frameon=False
+        )
+        ax.add_artist(ab)
+
+    ax.set_xlabel('PC 1')
+    ax.set_ylabel('PC 2')
+    plt.show()
 
 def show(img, detections = [], groundtruth = [], detection_labels = [], groundtruth_labels = []):
     build_fig(img, detections, groundtruth, detection_labels, groundtruth_labels)

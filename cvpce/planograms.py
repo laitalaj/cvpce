@@ -184,7 +184,10 @@ def _get_ransac_points_cross(boxes): # These might give a bit better results but
     rights = torch.stack((boxes[:, 2], centres[:, 1])).transpose(0, 1)
     return torch.cat((centres, tops, bottoms, lefts, rights))
 
-def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_threshold = 0.5, return_matched_actual=False, report_accuracy=False):
+def finalize_via_ransac(
+    solution, b1, b2, l1, l2, reproj_threshold = 10, iou_threshold = 0.5,
+    return_matched_actual=False, report_accuracy=False, return_expected_positions=False
+    ):
     nodes1, nodes2 = (list(l) for l in zip(*solution))
     boxes1 = b1[nodes1]
     boxes2 = b2[nodes2]
@@ -231,7 +234,12 @@ def finalize_via_ransac(solution, b1, b2, l1, l2, reproj_threshold = 10, iou_thr
     missing_expected = torch.where(matched_expected == False)[0]
     missing_positions = expected_positions[missing_expected]
     missing_labels = utils.tensors_to_labels(key, l1[missing_expected])[0]
+
+    if return_expected_positions and return_matched_actual:
+        return matched_expected, matched_actual, expected_positions, missing_expected, missing_positions, missing_labels
+    if return_expected_positions:
+        return matched_expected, expected_positions, missing_expected, missing_positions, missing_labels
     if return_matched_actual:
         return matched_expected, matched_actual, missing_expected, missing_positions, missing_labels
-    else:
-        return matched_expected, missing_expected, missing_positions, missing_labels
+
+    return matched_expected, missing_expected, missing_positions, missing_labels
